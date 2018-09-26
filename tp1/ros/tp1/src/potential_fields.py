@@ -43,30 +43,6 @@ def get_error():
     return ex, ey, et
 
 
-def holonomic_controller():
-    global goal
-
-    vel = Twist()
-    ex, ey, et = get_error()
-
-    if ex < tolerance and ey < tolerance:
-        vel.linear.x = 0
-        vel.linear.y = 0
-
-        print('Et', round(et, 4))
-
-        if et < tolerance_a:
-            vel.angular.z = 0
-            goal = True
-        else:
-            vel.angular.z = kt * et
-
-    vel.linear.x = kx * ex
-    vel.linear.y = ky * ey
-
-    return vel
-
-
 def differential_controller():
     global goal
 
@@ -96,7 +72,6 @@ def run():
 
     while not rospy.is_shutdown():
         if odomMsg and not goal:
-            # cmd_vel = holonomic_controller()
             cmd_vel = differential_controller()
 
         pub.publish(cmd_vel)
