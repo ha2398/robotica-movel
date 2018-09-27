@@ -3,7 +3,7 @@
 import rospy
 
 from geometry_msgs.msg import Twist
-from math import atan2, cos
+from math import atan2
 from nav_msgs.msg import Odometry
 
 
@@ -47,13 +47,13 @@ def get_error():
 
 
 def holonomic_controller():
-    global goal, set_front
+    global goal
 
     vel = Twist()
 
     ex, ey, et = get_error()
-    vel.linear.x = kx * ex * cos(theta)
-    vel.linear.y = ky * ey * cos(theta)
+    vel.linear.x = kx * ex
+    vel.linear.y = ky * ey
     vel.angular.z = kt * et
     return vel
 
