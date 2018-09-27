@@ -3,17 +3,14 @@
 import rospy
 
 from geometry_msgs.msg import Twist
-from math import pi, atan2
+from math import atan2, cos
 from nav_msgs.msg import Odometry
 
 
 odomMsg = None
-target = (2, 4, pi / 2)
-kx, ky, kt, kp = 1, 1, 1, 1
-tolerance = 0.001
-tolerance_a = 0.01
-
-goal = False
+target = (2, 4)
+kx, ky, kt = 1, 1, 1
+theta = None
 
 
 def LaserCallback(msg):
@@ -36,40 +33,34 @@ def yawFromQuaternion(orientation):
 
 
 def get_error():
+    global theta
+
     ex = target[0] - odomMsg.pose.pose.position.x
     ey = target[1] - odomMsg.pose.pose.position.y
-    et = target[2] - yawFromQuaternion(odomMsg.pose.pose.orientation)
+
+    if theta is None:
+        theta = atan2(ey, ex)
+
+    et = theta - yawFromQuaternion(odomMsg.pose.pose.orientation)
 
     return ex, ey, et
 
 
 def holonomic_controller():
-    global goal
+    global goal, set_front
 
     vel = Twist()
+
     ex, ey, et = get_error()
-
-    if ex < tolerance and ey < tolerance:
-        vel.linear.x = 0
-        vel.linear.y = 0
-
-        print('Et', round(et, 4))
-
-        if et < tolerance_a:
-            vel.angular.z = 0
-            goal = True
-        else:
-            vel.angular.z = kt * et
-
-    vel.linear.x = kx * ex
-    vel.linear.y = ky * ey
-
+    vel.linear.x = kx * ex * cos(theta)
+    vel.linear.y = ky * ey * cos(theta)
+    vel.angular.z = kt * et
     return vel
 
 
 def run():
     global laserMsg
-    rospy.init_node('move_example', anonymous=True)
+    rospy.init_node('bug2', anonymous=True)
     pub = rospy.Publisher('/cmd_vel', Twist, queue_size=10)
     rospy.Subscriber('/odom', Odometry, OdomCallback)
     rate = rospy.Rate(5)
@@ -78,6 +69,7 @@ def run():
     while not rospy.is_shutdown():
         if odomMsg and not goal:
             cmd_vel = holonomic_controller()
+            print('Vel:', cmd_vel)
 
         pub.publish(cmd_vel)
         rate.sleep()
