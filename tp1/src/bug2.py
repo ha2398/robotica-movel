@@ -11,6 +11,8 @@ odomMsg = None
 target = (2, 4)
 kx, ky, kt = 1, 1, 1
 theta = None
+set_front = False
+angle_tolerance = 0.01
 
 
 def LaserCallback(msg):
@@ -35,26 +37,33 @@ def yawFromQuaternion(orientation):
 def get_error():
     global theta
 
-    ex = target[0] - odomMsg.pose.pose.position.x
-    ey = target[1] - odomMsg.pose.pose.position.y
+    x = odomMsg.pose.pose.position.x
+    y = odomMsg.pose.pose.position.y
+    yaw = yawFromQuaternion(odomMsg.pose.pose.orientation)
 
-    if theta is None:
-        theta = atan2(ey, ex)
+    ex = target[0] - x
+    ey = target[1] - y
+    theta = atan2(ey, ex)
+    et = theta - yaw
 
-    et = theta - yawFromQuaternion(odomMsg.pose.pose.orientation)
-
-    return ex, ey, et
+    return ex, et
 
 
 def holonomic_controller():
-    global goal
+    global set_front
 
     vel = Twist()
+    ex, et = get_error()
 
-    ex, ey, et = get_error()
-    vel.linear.x = kx * ex
-    vel.linear.y = ky * ey
-    vel.angular.z = kt * et
+    if not set_front:
+        if abs(et) < angle_tolerance:
+            set_front = True
+        else:
+            vel.linear.x = 0
+            vel.angular.z = kt * et
+    else:
+        vel.linear.x = kx * ex
+
     return vel
 
 
@@ -63,13 +72,12 @@ def run():
     rospy.init_node('bug2', anonymous=True)
     pub = rospy.Publisher('/cmd_vel', Twist, queue_size=10)
     rospy.Subscriber('/odom', Odometry, OdomCallback)
-    rate = rospy.Rate(5)
+    rate = rospy.Rate(1000)
     cmd_vel = Twist()
 
     while not rospy.is_shutdown():
-        if odomMsg and not goal:
+        if odomMsg:
             cmd_vel = holonomic_controller()
-            print('Vel:', cmd_vel)
 
         pub.publish(cmd_vel)
         rate.sleep()

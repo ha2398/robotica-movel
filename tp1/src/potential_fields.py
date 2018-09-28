@@ -9,11 +9,7 @@ from nav_msgs.msg import Odometry
 
 odomMsg = None
 target = (2, 4, pi / 2)
-kx, ky, kt, kp = 1, 1, 1, 1
-tolerance = 0.001
-tolerance_a = 0.01
-
-goal = False
+kx, ky, kt = 1, 1, 1
 
 
 def LaserCallback(msg):
@@ -44,34 +40,27 @@ def get_error():
 
 
 def differential_controller():
-    global goal
-
     vel = Twist()
     ex, ey, et = get_error()
     theta = yawFromQuaternion(odomMsg.pose.pose.orientation)
 
-    vel.linear.x = kp * ex * cos(theta)
-    vel.linear.y = kp * ey * sin(theta)
+    vel.linear.x = kx * ex * cos(theta)
+    vel.linear.y = ky * ey * sin(theta)
     vel.angular.z = kt * (atan2(ey, ex) - theta)
-
-    if ex < tolerance and ey < tolerance and et < tolerance_a:
-        vel.linear.x = 0
-        vel.linear.y = 0
-        vel.angular.z = 0
 
     return vel
 
 
 def run():
     global laserMsg
-    rospy.init_node('move_example', anonymous=True)
+    rospy.init_node('potential_fields', anonymous=True)
     pub = rospy.Publisher('/cmd_vel', Twist, queue_size=10)
     rospy.Subscriber('/odom', Odometry, OdomCallback)
     rate = rospy.Rate(5)
     cmd_vel = Twist()
 
     while not rospy.is_shutdown():
-        if odomMsg and not goal:
+        if odomMsg:
             cmd_vel = differential_controller()
 
         pub.publish(cmd_vel)
