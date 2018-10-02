@@ -7,6 +7,7 @@ from math import atan2, degrees
 from nav_msgs.msg import Odometry
 from sensor_msgs.msg import LaserScan
 from sys import argv
+from time import time
 
 RATE = 20
 QUEUE_SIZE = 10
@@ -18,7 +19,7 @@ kx, ky, kt = 1, 1, 2
 laserMsg = None
 odomMsg = None
 
-TARGET = None
+GOAL = None
 theta = None
 SET_FRONT = False
 ANGLE_TOLERANCE = 0.005
@@ -37,8 +38,6 @@ DIST_QH = None
 FRONT_LEFT = 240
 FRONT_RIGHT = 120
 RIGHT_START = 150
-
-GOAL_ACHIEVED = False
 
 
 def LaserCallback(msg):
@@ -72,25 +71,24 @@ def get_error():
 
     x, y = get_robot_coordinates()
     yaw = yawFromQuaternion(odomMsg.pose.pose.orientation)
-
-    ex = euclidean_distance((x, y), TARGET)
-    theta = atan2(TARGET[1] - y, TARGET[0] - x)
+    ex = get_dist_to_goal()
+    theta = atan2(GOAL[1] - y, GOAL[0] - x)
     et = theta - yaw
 
     return ex, et
 
 
 def set_params():
-    global TARGET
+    global GOAL
 
-    TARGET = float(argv[1]), float(argv[2])
+    GOAL = float(argv[1]), float(argv[2])
 
 
 def set_goal_line():
     global line_a, line_b, line_c
 
     x_a, y_a = get_robot_coordinates()
-    x_b, y_b = TARGET
+    x_b, y_b = GOAL
 
     m = (y_b - y_a) / (x_b - x_a)
     b = y_b - m * x_b
@@ -128,10 +126,8 @@ def follow_line():
                 vel.angular.z = kt * et * -1
     else:
         if is_blocked():
-            x, y = get_robot_coordinates()
-            dist_to_target = euclidean_distance((x, y), TARGET)
             OBSTACLE = True
-            DIST_QH = dist_to_target
+            DIST_QH = get_dist_to_goal()
             SET_FRONT = False
             vel.linear.x = 0
             vel.angular.z = 0
@@ -168,15 +164,19 @@ def can_turn_right():
     return all(ranges)
 
 
+def get_dist_to_goal():
+    x, y = get_robot_coordinates()
+    return euclidean_distance((x, y), GOAL)
+
+
 def outline_obstacle():
     global OBSTACLE
 
     vel = Twist()
-    coord = get_robot_coordinates()
 
-    # Check if robot can move to TARGET again.
+    # Check if robot can move to GOAL again.
     if get_distance_to_line() < LINE_DIST_TOLERANCE and \
-            euclidean_distance(coord, TARGET) + MIN_DIST_IMPROVEMENT < DIST_QH:
+            get_dist_to_goal() + MIN_DIST_IMPROVEMENT < DIST_QH:
 
         OBSTACLE = False
         vel.linear.x = 0
@@ -220,18 +220,17 @@ def run():
     rate = rospy.Rate(RATE)
     cmd_vel = Twist()
 
+    start_time = time()
     while not rospy.is_shutdown():
         if laserMsg is None:
             rate.sleep()
             continue
 
         if odomMsg:
-            x, y = get_robot_coordinates()
-            dist_to_target = euclidean_distance((x, y), TARGET)
-
-            if dist_to_target < GOAL_TOLERANCE:
-                print('Goal achieved')
-                return
+            if get_dist_to_goal() < GOAL_TOLERANCE:
+                print 'Goal achieved'
+                end_time = time()
+                break
 
             if line_a is None:
                 set_goal_line()
@@ -240,6 +239,9 @@ def run():
 
         pub.publish(cmd_vel)
         rate.sleep()
+
+    print 'Time elapsed:', round(end_time - start_time, 2), 's'
+    return
 
 
 if __name__ == '__main__':
