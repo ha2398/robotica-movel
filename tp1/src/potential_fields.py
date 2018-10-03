@@ -3,7 +3,7 @@
 import rospy
 
 from geometry_msgs.msg import Twist
-from math import atan2, cos, degrees, radians, sin
+from math import atan2, cos, radians, sin
 from nav_msgs.msg import Odometry
 from sensor_msgs.msg import LaserScan
 from sys import argv
@@ -14,10 +14,10 @@ RATE = 20
 QUEUE_SIZE = 10
 
 # Speed constants
-kt = 1
-k_att, k_rep = 10, 0.1
+kt = 5
+k_att, k_rep = 10, 5
 
-p_0 = 4
+p_0 = 0.9
 
 # Messages
 laserMsg = None
@@ -85,7 +85,7 @@ def get_f_rep():
         if d > p_0:
             continue
 
-        angle = radians((i / 2)) + yaw + radians(90)
+        angle = radians((i / 2)) + yaw
         magnitude = k_rep * ((1 / d) - (1 / p_0)) * (1 / (d ** 2))
         f_i = [cos(angle) * magnitude, sin(angle) * magnitude]
         f_rep = sum_vectors(f_rep, f_i)
@@ -100,13 +100,6 @@ def sum_vectors(v1, v2):
 def get_force_vector():
     f_att = get_f_att()
     f_rep = get_f_rep()
-
-    m_att = sum(v_i ** 2 for v_i in f_att) ** .5
-    m_rep = sum(v_i ** 2 for v_i in f_rep) ** .5
-
-    print 'ATTRACTION\t', 'theta:', degrees(atan2(f_att[1], f_att[0])), 'magnitude:', m_att
-    print 'REPULSION\t', 'theta:', degrees(atan2(f_rep[1], f_rep[0])), 'magnitude:', m_rep
-
     return sum_vectors(f_att, f_rep)
 
 
@@ -126,17 +119,11 @@ def potential_fields():
 
     theta = atan2(fy, fx)
 
-    m = get_norm(f)
-    print 'RESULTANT\t', 'theta:', degrees(theta), 'magnitude:', m
-    print
-
     vel = Twist()
     yaw = yawFromQuaternion(odomMsg.pose.pose.orientation)
 
-    x = fx * cos(yaw)
-    y = fy * sin(yaw)
-    vel.linear.x = x * cos(yaw) + y * sin(yaw)
-    vel.linear.y = y * cos(yaw) - x * sin(yaw)
+    vel.linear.x = fx * cos(yaw) + fy * sin(yaw)
+    vel.linear.y = fy * cos(yaw) - fx * sin(yaw)
     vel.angular.z = kt * (theta - yaw)
 
     return vel
@@ -171,15 +158,8 @@ def run():
                 break
 
             cmd_vel = potential_fields()
-            yaw = yawFromQuaternion(odomMsg.pose.pose.orientation)
-            print 'YAW:', degrees(yaw)
 
-            print 'VELOCITIES'
-            print 'x:', cmd_vel.linear.x
-            print 'y:', cmd_vel.linear.y
-            print 'w:', cmd_vel.angular.z
-
-        # pub.publish(cmd_vel)
+        pub.publish(cmd_vel)
         rate.sleep()
 
     print 'Time elapsed:', round(end_time - start_time, 2), 's'

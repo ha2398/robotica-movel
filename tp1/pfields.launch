@@ -1,6 +1,8 @@
 <launch>
   <!-- Name of the world file to use -->
   <arg name="world_file"     default="$(find tp1)/maps/differential_map.world"/>
+  <arg name="x"     default="6"/>
+  <arg name="y"     default="-3"/>
   <param name="/use_sim_time" value="true"/>
 
   <!--  ******************** Stage ********************  -->
@@ -21,4 +23,6 @@
   <node pkg="stage_ros" type="stageros" name="stageros" args="$(arg world_file)">
     <param name="base_watchdog_timeout" value="0.5"/>
   </node>
+
+  <node pkg="tp1" type="potential_fields.py" name="potential_fields" args="$(arg x) $(arg y)" output="screen"></node>
 </launch>
