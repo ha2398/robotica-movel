@@ -20,7 +20,6 @@ laserMsg = None
 odomMsg = None
 
 GOAL = None
-theta = None
 SET_FRONT = False
 ANGLE_TOLERANCE = 0.005
 
@@ -100,8 +99,9 @@ def get_error():
         Get the error calculated as the difference between current pose and the
         desired one.
 
-        @ex: (float) Error in x (robot's frame).
-        @et: (float) Error in theta (orientation towards goal).
+        @return:
+            @ex: (float) Error in x (robot's frame).
+            @et: (float) Error in theta (orientation towards goal).
     '''
 
     global theta
