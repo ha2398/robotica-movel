@@ -24,13 +24,16 @@ theta = None
 SET_FRONT = False
 ANGLE_TOLERANCE = 0.005
 
+# Line coefficients.
 line_a, line_b, line_c = None, None, None
 
+# Tolerance constants.
 MIN_OBJ_DIST = 0.6
 LINE_DIST_TOLERANCE = 0.1
 GOAL_TOLERANCE = 0.1
 MIN_DIST_IMPROVEMENT = 0.5
 
+# Bug 2 variables
 OBSTACLE = False
 DIST_QH = None
 
@@ -41,16 +44,34 @@ RIGHT_START = 150
 
 
 def LaserCallback(msg):
+    '''
+        Callback function for laser messages.
+    '''
+
     global laserMsg
+
     laserMsg = msg
+    return
 
 
 def OdomCallback(msg):
+    '''
+        Callback function for odometry messages.
+    '''
+
     global odomMsg
+
     odomMsg = msg
+    return
 
 
 def get_robot_coordinates():
+    '''
+        Get current robot coordinates in space.
+
+        @return: (float, float) Tuple with x and y coordinates of the robot.
+    '''
+
     x = odomMsg.pose.pose.position.x
     y = odomMsg.pose.pose.position.y
 
@@ -58,6 +79,14 @@ def get_robot_coordinates():
 
 
 def yawFromQuaternion(orientation):
+    '''
+        Get robot's Yaw angle from its odom orientation quaternion.
+
+        @orientation: (odom orientation) Robot current quaternion.
+
+        @return: (float) Robot's yaw in radians.
+    '''
+
     x = orientation.x
     y = orientation.y
     z = orientation.z
@@ -67,6 +96,14 @@ def yawFromQuaternion(orientation):
 
 
 def get_error():
+    '''
+        Get the error calculated as the difference between current pose and the
+        desired one.
+
+        @ex: (float) Error in x (robot's frame).
+        @et: (float) Error in theta (orientation towards goal).
+    '''
+
     global theta
 
     x, y = get_robot_coordinates()
@@ -79,12 +116,21 @@ def get_error():
 
 
 def set_params():
+    '''
+        Set the input parameters.
+    '''
+
     global GOAL
 
     GOAL = float(argv[1]), float(argv[2])
+    return
 
 
 def set_goal_line():
+    '''
+        Calculate the line connecting the initial and the goal position.
+    '''
+
     global line_a, line_b, line_c
 
     x_a, y_a = get_robot_coordinates()
@@ -96,9 +142,17 @@ def set_goal_line():
     line_a = - m
     line_b = 1
     line_c = - b
+    return
 
 
 def get_distance_to_line():
+    '''
+        Calculate the distance between the robot and the line set initially.
+
+        @return: (float) Distance between robot and the line connecting its
+            initial position to the goal.
+    '''
+
     x, y = get_robot_coordinates()
 
     return abs(line_a * x + line_b * y + line_c) / \
@@ -106,10 +160,26 @@ def get_distance_to_line():
 
 
 def euclidean_distance(p1, p2):
+    '''
+        Calculate the Euclidean distance between two 2D points.
+
+        @p1: (float, float) Point 1 coordinates.
+        @p2: (float, float) Point 2 coordinates.
+
+        @return: (float) Euclidean distance between points 1 and 2.
+    '''
+
     return sum([(p1_i - p2_i) ** 2 for (p1_i, p2_i) in zip(p1, p2)]) ** 0.5
 
 
 def follow_line():
+    '''
+        Control the robot through the line connecting its initial position and
+        the goal.
+
+        @return: (Twist) Velocity object.
+    '''
+
     global DIST_QH, OBSTACLE, SET_FRONT
 
     vel = Twist()
@@ -139,6 +209,12 @@ def follow_line():
 
 
 def is_blocked():
+    '''
+        Check if the robot is blocked ahead.
+
+        @return: (bool) True, if the robot is blocked. False otherwise.
+    '''
+
     ranges = [True if r <= MIN_OBJ_DIST else False
               for r in laserMsg.ranges[FRONT_RIGHT:FRONT_LEFT]]
 
@@ -146,18 +222,37 @@ def is_blocked():
 
 
 def get_average_dist_front():
+    '''
+        Get the average distance for obstacles ahead of the robot.
+
+        @return: (float) Average distance for obstacles ahead of the robot.
+    '''
+
     ranges = laserMsg.ranges[FRONT_RIGHT:FRONT_LEFT]
 
     return sum(ranges) / len(ranges)
 
 
 def get_average_dist_right():
+    '''
+        Get the average distance for obstacles to the right of the robot.
+
+        @return: (float) Average distance for obstacles to the right of the
+            robot.
+    '''
+
     ranges = laserMsg.ranges[:RIGHT_START]
 
     return sum(ranges) / len(ranges)
 
 
 def can_turn_right():
+    '''
+        Check if the robot can turn right.
+
+        @return: (bool) True, if the robot can turn right. False otherwise.
+    '''
+
     ranges = [True if r > MIN_OBJ_DIST else False
               for r in laserMsg.ranges[:RIGHT_START]]
 
@@ -165,11 +260,23 @@ def can_turn_right():
 
 
 def get_dist_to_goal():
+    '''
+        Calculate the robot's distance to the goal position.
+
+        @return: (float) Robot's distance to goal.
+    '''
+
     x, y = get_robot_coordinates()
     return euclidean_distance((x, y), GOAL)
 
 
 def outline_obstacle():
+    '''
+        Control the robot around an obstacle.
+
+        @return: (Twist) Velocity object.
+    '''
+
     global OBSTACLE
 
     vel = Twist()
@@ -199,7 +306,11 @@ def outline_obstacle():
 
 
 def bug2():
-    global DIST_QH, OBSTACLE, SET_FRONT
+    '''
+        Control the robot towards the goal position, using the Bug 2 algorithm.
+
+        @return: (Twist) Velocity object.
+    '''
 
     if OBSTACLE:
         return outline_obstacle()
@@ -208,11 +319,14 @@ def bug2():
 
 
 def run():
-    global laserMsg
+    '''
+        Main program.
+    '''
 
     rospy.init_node('bug2', anonymous=True)
     set_params()
 
+    # Messages
     pub = rospy.Publisher('/cmd_vel', Twist, queue_size=QUEUE_SIZE)
     rospy.Subscriber('/odom', Odometry, OdomCallback)
     rospy.Subscriber('/base_scan', LaserScan, LaserCallback)
@@ -220,6 +334,7 @@ def run():
     rate = rospy.Rate(RATE)
     cmd_vel = Twist()
 
+    # Start algorithm execution.
     start_time = time()
     while not rospy.is_shutdown():
         if laserMsg is None:
