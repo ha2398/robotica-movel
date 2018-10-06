@@ -141,12 +141,13 @@ def get_f_rep():
 
     f_rep = [0, 0]
     yaw = yawFromQuaternion(odomMsg.pose.pose.orientation)
+    min_d = min(laserMsg.ranges)
 
-    for i, d in enumerate(laserMsg.ranges[:-1]):  # 360 degrees
-        if d > p_0:
+    for i, d in enumerate(laserMsg.ranges):  # 360 degrees
+        if d > p_0 or d != min_d:
             continue
 
-        angle = radians((i / 2)) + yaw
+        angle = radians(i / 2) + yaw + radians(90)
         magnitude = k_rep * ((1 / d) - (1 / p_0)) * (1 / (d ** 2))
         f_i = [cos(angle) * magnitude, sin(angle) * magnitude]
         f_rep = sum_vectors(f_rep, f_i)
@@ -176,6 +177,7 @@ def get_force_vector():
 
     f_att = get_f_att()
     f_rep = get_f_rep()
+
     return sum_vectors(f_att, f_rep)
 
 
