@@ -1,0 +1,34 @@
+# import the other files to add a basic 'world' template and our robot file
+include "differential_robot.inc"
+include "map.inc"
+
+# window configurations for this simulation instance
+# see for detaiils: http://playerstage.sourceforge.net/doc/stage-cvs/group__window.html
+window
+( 
+  size [ 500.000 500.000 ] 
+  center [-0.077 -0.231] 
+  rotate [ 0 0 ]
+  scale 26.000 
+  show_data 1 # make sure we can see the effect of the controller
+)
+
+# the 'floor' used, generally is a png/bmp file 
+# see: http://playerstage.sourceforge.net/doc/stage-cvs/group__model.html
+floorplan
+( 
+    bitmap "bitmaps/cave.png"
+    map_resolution 0.032
+    size [16.000 16.000 0.500]
+    name "cave"
+    color "gray50"
+    gui_grid 1
+    gui_outline 1
+)
+
+# our robot from holonomic_robot.inc
+# see for details: http://playerstage.sourceforge.net/doc/stage-cvs/group__model__position.html
+pioneer_with_hokuyo(
+    name "differential_robot"
+    pose [-7 -7 0 0]
+)
