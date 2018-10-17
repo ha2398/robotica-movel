@@ -13,9 +13,10 @@ from geometry_msgs.msg import Twist
 from math import atan2, degrees
 from nav_msgs.msg import Odometry
 from sensor_msgs.msg import LaserScan
+from tf.transformations import euler_from_quaternion
 
 
-class Robot():
+class Robot:
     '''
         Class constants.
     '''
@@ -26,16 +27,9 @@ class Robot():
     # Speed constants
     kx, kt = 1, 2
 
-    # Messages
-    laserMsg = None
-    odomMsg = None
-
     GOAL = None
     SET_FRONT = False
     ANGLE_TOLERANCE = 0.005
-
-    # Line coefficients.
-    line_a, line_b, line_c = None, None, None
 
     # Tolerance constants.
     MIN_OBJ_DIST = 0.6
@@ -60,12 +54,30 @@ class Robot():
         rospy.Subscriber('/odom', Odometry, self.odom_callback)
         self.rate = rospy.Rate(self.RATE)
 
+        self.laser_msg = None
+        self.odom_msg = None
+
+        while not self.laser_msg and not self.odom_msg:  # Wait for messages.
+            pass
+
+        # Line coefficients.
+        self.line_a, self.line_b, self.line_c = None, None, None
+        self.line_set = False
+
     def laser_callback(self, msg):
         '''
             Callback function for laser messages.
         '''
 
         self.laser_msg = msg
+        return
+
+    def odom_callback(self, msg):
+        '''
+            Callback function for odom messages.
+        '''
+
+        self.odom_msg = msg
         return
 
     def get_robot_coordinates(self):
@@ -81,7 +93,7 @@ class Robot():
 
         return x, y
 
-    def euclidean_distance(p1, p2):
+    def euclidean_distance(self, p1, p2):
         '''
             Calculate the Euclidean distance between two 2D points.
 
@@ -107,7 +119,7 @@ class Robot():
         '''
 
         xr, yr = self.get_robot_coordinates()
-        yaw = self.yawFromQuaternion()
+        yaw = self.get_yaw()
         ex = self.euclidean_distance((xr, yr), (x, y))
         theta = atan2(y - yr, x - xr)
         et = theta - yaw
@@ -133,35 +145,35 @@ class Robot():
 
         return
 
-    def get_distance_to_line(self):
+    def get_distance_to_line(self, x, y):
         '''
             Calculate the distance between the robot and the line set
                 initially.
+
+            @x: (float) Desired position x coordinate.
+            @y: (float) Desired position y coordinate.
 
             @return: (float) Distance between robot and the line connecting its
                 initial position to the goal.
         '''
 
-        x, y = self.get_robot_coordinates()
+        coord = self.get_robot_coordinates()
 
-        return abs(self.line_a * x + self.line_b * y + self.line_c) / \
-            ((self.line_a ** 2 + self.line_b ** 2) ** 0.5)
+        return abs(self.line_a * coord[0] + self.line_b * coord[1] +
+                   self.line_c) / ((self.line_a ** 2 +
+                                    self.line_b ** 2) ** 0.5)
 
-    def yawFromQuaternion(self):
+    def get_yaw(self):
         '''
             Get robot's Yaw angle from its odom orientation quaternion.
 
             @return: (float) Robot's yaw in radians.
         '''
 
-        orientation = self.odomMsg.pose.pose.orientation
-
-        x = orientation.x
-        y = orientation.y
-        z = orientation.z
-        w = orientation.w
-
-        return atan2((2.0 * (w * z + x * y)), (1.0 - 2.0 * (y * y + z * z)))
+        orientation = self.odom_msg.pose.pose.orientation
+        quaternion = (orientation.x, orientation.y, orientation.z,
+                      orientation.w)
+        return euler_from_quaternion(quaternion)[2]
 
     def move(self):
         '''
@@ -254,7 +266,7 @@ class Robot():
         else:
             if self.is_blocked():
                 self.OBSTACLE = True
-                self.DIST_QH = self.get_dist_to_goal()
+                self.DIST_QH = self.get_dist_to_goal(x, y)
                 self.SET_FRONT = False
 
                 vel.linear.x = 0
@@ -280,7 +292,7 @@ class Robot():
         vel = Twist()
 
         # Check if robot can move to GOAL again.
-        dist_line = self.get_distance_to_line()
+        dist_line = self.get_distance_to_line(x, y)
         dist_goal = self.get_dist_to_goal(x, y)
         if dist_line < self.LINE_DIST_TOLERANCE and \
                 dist_goal + self.MIN_DIST_IMPROVEMENT < self.DIST_QH:
@@ -288,13 +300,13 @@ class Robot():
             self.OBSTACLE = False
             vel.linear.x = 0
             vel.angular.z = 0
-            self.cmd_vel(vel)
+            self.cmd_vel = vel
             self.move()
             return
 
         if self.is_blocked():  # Turning left
             vel.angular.z = self.kt
-            self.cmd_vel(vel)
+            self.cmd_vel = vel
             self.move()
             return
         else:
@@ -304,11 +316,11 @@ class Robot():
                 right_distance = self.get_average_dist_right()
                 vel.linear.x = self.kx / right_distance
                 vel.angular.z = - self.kt * right_distance
-                self.cmd_vel(vel)
+                self.cmd_vel = vel
                 self.move()
                 return
 
-            self.cmd_vel(vel)
+            self.cmd_vel = vel
             self.move()
             return
 
@@ -321,7 +333,19 @@ class Robot():
             @y: (float) Desired position y coordinate.
         '''
 
+        if self.get_dist_to_goal(x, y) < self.GOAL_TOLERANCE:
+            # Line coefficients.
+            self.line_a, self.line_b, self.line_c = None, None, None
+            self.line_set = False
+            return False
+
+        if not self.line_set:
+            self.set_goal_line(x, y)
+            self.line_set = True
+
         if self.OBSTACLE:
             self.outline_obstacle(x, y)
 
         self.follow_line(x, y)
+
+        return True

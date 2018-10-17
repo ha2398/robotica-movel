@@ -18,8 +18,13 @@ def run():
     rospy.init_node('tp2', anonymous=True)
     robot = Robot()
 
+    goal = (5, 6)
+
     while not rospy.is_shutdown():
-        robot.bug2(5, 6)
+        if not robot.bug2(*goal):
+            break
+
+    print 'Done'
 
     return
 
