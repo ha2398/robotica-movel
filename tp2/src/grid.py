@@ -40,6 +40,8 @@ class Grid:
             map_file.write('{} {}\n'.format(self.width, self.height))
             map_file.write('{}\n'.format(self.MAX_GRAY_VALUE))
 
+            np.flipud(self.cells)
+
             for h in range(self.height):
                 for w in range(self.width):
                     value = self.cells[h, w]
@@ -47,3 +49,5 @@ class Grid:
                     map_file.write('{} '.format(value))
 
                 map_file.write('\n')
+
+            np.flipud(self.cells)

@@ -10,6 +10,7 @@ functionalities.
 import rospy
 
 from geometry_msgs.msg import Twist
+from grid import Grid
 from math import atan2, degrees
 from nav_msgs.msg import Odometry
 from sensor_msgs.msg import LaserScan
@@ -20,9 +21,6 @@ class Robot:
     '''
         Class constants.
     '''
-
-    RATE = 20
-    QUEUE_SIZE = 10
 
     # Speed constants
     kx, kt = 1, 2
@@ -46,18 +44,19 @@ class Robot:
     FRONT_RIGHT = 120
     RIGHT_START = 150
 
-    def __init__(self):
+    def __init__(self, robot_rate, ros_queue_size):
         # Messages
         self.pub = rospy.Publisher('/cmd_vel', Twist,
-                                   queue_size=self.QUEUE_SIZE)
+                                   queue_size=ros_queue_size)
         rospy.Subscriber('/base_scan', LaserScan, self.laser_callback)
         rospy.Subscriber('/odom', Odometry, self.odom_callback)
-        self.rate = rospy.Rate(self.RATE)
+        self.rate = rospy.Rate(robot_rate)
 
         self.laser_msg = None
         self.odom_msg = None
 
-        while not self.laser_msg and not self.odom_msg:  # Wait for messages.
+        # Wait for messages.
+        while not self.laser_msg and not self.odom_msg:
             pass
 
         # Line coefficients.
@@ -349,3 +348,15 @@ class Robot:
         self.follow_line(x, y)
 
         return True
+
+    def occupancy_grid(self, height, width, initial_p):
+        '''
+            Run the Occupancy Grid algorithm to find the environment map.
+        '''
+
+        coord = self.get_robot_coordinates()
+        grid = Grid(height, width, initial_p, coord)
+
+        while not rospy.is_shutdown():
+            grid.dump_pgm()
+            self.rate.sleep()

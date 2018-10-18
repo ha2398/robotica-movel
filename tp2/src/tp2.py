@@ -7,7 +7,27 @@ Mobile Robotics - TP2
 '''
 
 import rospy
+
 from robot import Robot
+from sys import argv
+
+
+RATE = 10
+QUEUE_SIZE = 10
+
+
+def get_args():
+    '''
+        Get command line arguments.
+    '''
+
+    args = {
+        'height': int(argv[1]),
+        'width': int(argv[2]),
+        'initial_p': float(argv[3])
+    }
+
+    return args
 
 
 def run():
@@ -15,17 +35,10 @@ def run():
         Main program.
     '''
 
+    args = get_args()
     rospy.init_node('tp2', anonymous=True)
-    robot = Robot()
-
-    goal = (5, 6)
-
-    while not rospy.is_shutdown():
-        if not robot.bug2(*goal):
-            break
-
-    print 'Done'
-
+    robot = Robot(RATE, QUEUE_SIZE)
+    robot.occupancy_grid(args['height'], args['width'], args['initial_p'])
     return
 
 
@@ -36,5 +49,4 @@ def main():
         pass
 
 
-print('hi')
 main()
