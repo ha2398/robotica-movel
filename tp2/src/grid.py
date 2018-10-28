@@ -16,18 +16,40 @@ class Grid:
     PGM_MAGIC_NUM = 'P2'
     MAX_GRAY_VALUE = 100
 
-    def __init__(self, height, width, initial_p, origin):
+    def __init__(self, height, width, initial_p, origin, resolution):
         '''
             @height: (int) Number of cells that form the grid's height.
             @width: (int) Number of cells that form the grid's width.
             @initial_p: (float) Initial blocked probability for each cell.
-            @origin: (float, float) Origin of the map in the coordinate
+            @origin: (float, float) Origin of the map in the coordinate.
+            @resolution: (float) Size of the cells side.
         '''
 
         self.height = height
         self.width = width
         self.origin = origin
         self.cells = np.full((height, width), initial_p)
+        self.resolution = resolution
+
+    def position_to_index(self, x, y):
+        '''
+            Get the cell index of a given position in the world.
+
+            @x: (float) x coordinate of position in the world frame.
+            @y: (float) y coordinate of position in the world frame.
+
+            @return: (int, int) Index of the corresponding grid cell of the
+                given position.
+        '''
+
+        # Convert coordinates to Map frame.
+        x, y = x - self.origin[0], y - self.origin[1]
+
+        # Get grid cell index.
+        i = int(y // self.resolution + self.width // 2)
+        j = int(x // self.resolution + self.width // 2)
+
+        return (i, j)
 
     def dump_pgm(self):
         '''
