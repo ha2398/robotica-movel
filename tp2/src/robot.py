@@ -12,7 +12,7 @@ import rospy
 from geometry_msgs.msg import Twist
 from grid import Grid
 from math import atan2, degrees
-from nav_msgs.msg import Odometry
+from nav_msgs.msg import OccupancyGrid, Odometry
 from sensor_msgs.msg import LaserScan
 from tf.transformations import euler_from_quaternion
 
@@ -46,22 +46,29 @@ class Robot:
 
     def __init__(self, robot_rate, ros_queue_size):
         # Messages
-        self.pub = rospy.Publisher('/cmd_vel', Twist,
-                                   queue_size=ros_queue_size)
+        self.vel_pub = rospy.Publisher('/cmd_vel', Twist,
+                                       queue_size=ros_queue_size)
         rospy.Subscriber('/base_scan', LaserScan, self.laser_callback)
         rospy.Subscriber('/odom', Odometry, self.odom_callback)
+        self.map_pub = rospy.Publisher('/map', OccupancyGrid,
+                                       queue_size=ros_queue_size)
         self.rate = rospy.Rate(robot_rate)
 
         self.laser_msg = None
         self.odom_msg = None
 
-        # Wait for messages.
-        while not self.laser_msg and not self.odom_msg:
-            pass
-
         # Line coefficients.
         self.line_a, self.line_b, self.line_c = None, None, None
         self.line_set = False
+
+    def is_ready(self):
+        '''
+            Check if robot has all needed messages.
+
+            @return: (bool) True iff robot has all messages it needs.
+        '''
+
+        return self.laser_msg is not None and self.odom_msg is not None
 
     def laser_callback(self, msg):
         '''
@@ -179,7 +186,7 @@ class Robot:
             Make the robot move and explore the environment.
         '''
 
-        self.pub.publish(self.cmd_vel)
+        self.vel_pub.publish(self.cmd_vel)
         self.rate.sleep()
         return
 
@@ -344,19 +351,29 @@ class Robot:
 
         if self.OBSTACLE:
             self.outline_obstacle(x, y)
+            return True
 
         self.follow_line(x, y)
-
         return True
 
-    def occupancy_grid(self, height, width, initial_p):
+    def occupancy_grid(self, height, width, initial_p, resolution):
         '''
             Run the Occupancy Grid algorithm to find the environment map.
+
+            @height: (int) Number of cells that form the grid's height.
+            @width: (int) Number of cells that form the grid's width.
+            @initial_p: (float) Initial blocked probability for each cell.
+            @resolution: (float) Size of the cells side.
         '''
 
         coord = self.get_robot_coordinates()
-        grid = Grid(height, width, initial_p, coord)
+        grid = Grid(height, width, initial_p, coord, resolution)
 
+        goal = (5, 5)
         while not rospy.is_shutdown():
-            grid.dump_pgm()
+            coord = self.get_robot_coordinates()
+            # grid.dump_pgm()
+            self.bug2(*goal)
+            msg = grid.get_occupancy_msg(coord)
+            self.map_pub.publish(msg)
             self.rate.sleep()

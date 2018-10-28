@@ -4,6 +4,7 @@
 
   <arg name="height"      default="100"/>
   <arg name="width"      default="100"/>
+  <arg name="resolution"      default="1"/>
   <arg name="initial_p"      default="0.5"/>
 
   <param name="/use_sim_time" value="true"/>
@@ -28,5 +29,5 @@
     <param name="base_watchdog_timeout" value="0.5"/>
   </node>
 
-  <node pkg="tp2" type="tp2.py" name="tp2" args="$(arg height) $(arg width) $(arg initial_p)" output="screen"></node>
+  <node pkg="tp2" type="tp2.py" name="tp2" args="$(arg height) $(arg width) $(arg resolution) $(arg initial_p)" output="screen"></node>
 </launch>

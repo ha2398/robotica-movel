@@ -6,7 +6,10 @@
 Class Grid models the robot environment as a grid of cells.
 '''
 
+from nav_msgs.msg import OccupancyGrid
+
 import numpy as np
+import rospy
 
 
 class Grid:
@@ -16,18 +19,20 @@ class Grid:
     PGM_MAGIC_NUM = 'P2'
     MAX_GRAY_VALUE = 100
 
-    def __init__(self, height, width, initial_p, origin, resolution):
+    def __init__(self, height, width, initial_p, pos, resolution):
         '''
             @height: (int) Number of cells that form the grid's height.
             @width: (int) Number of cells that form the grid's width.
             @initial_p: (float) Initial blocked probability for each cell.
-            @origin: (float, float) Origin of the map in the coordinate.
+            @pos: (float, float) Robot position when starting to map.
             @resolution: (float) Size of the cells side.
         '''
 
         self.height = height
         self.width = width
-        self.origin = origin
+
+        # Give the robot space to explore in all directions.
+        self.origin = pos
         self.cells = np.full((height, width), initial_p)
         self.resolution = resolution
 
@@ -42,12 +47,9 @@ class Grid:
                 given position.
         '''
 
-        # Convert coordinates to Map frame.
-        x, y = x - self.origin[0], y - self.origin[1]
-
         # Get grid cell index.
-        i = int(y // self.resolution + self.width // 2)
-        j = int(x // self.resolution + self.width // 2)
+        i = int((y - self.origin[1]) // self.resolution)
+        j = int((x - self.origin[0]) // self.resolution)
 
         return (i, j)
 
@@ -73,3 +75,25 @@ class Grid:
                 map_file.write('\n')
 
             np.flipud(self.cells)
+
+    def get_occupancy_msg(self, coord):
+        '''
+            Create an Occupancy Grid message from grid data.
+
+            @return: (OccupancyGrid) Occupancy Grid message.
+        '''
+
+        msg = OccupancyGrid()
+        msg.header.frame_id = 'map'
+        msg.info.resolution = self.resolution
+        msg.info.width = self.width
+        msg.info.height = self.height
+        msg.info.origin.position.x = - self.width / 2
+        msg.info.origin.position.y = - self.height / 2
+        msg.header.stamp = rospy.Time.now()
+
+        np.flipud(self.cells)
+        msg.data = [int(x * self.MAX_GRAY_VALUE) for x in self.cells.flat]
+        np.flipud(self.cells)
+
+        return msg

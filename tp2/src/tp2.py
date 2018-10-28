@@ -24,7 +24,8 @@ def get_args():
     args = {
         'height': int(argv[1]),
         'width': int(argv[2]),
-        'initial_p': float(argv[3])
+        'resolution': float(argv[3]),
+        'initial_p': float(argv[4])
     }
 
     return args
@@ -38,7 +39,12 @@ def run():
     args = get_args()
     rospy.init_node('tp2', anonymous=True)
     robot = Robot(RATE, QUEUE_SIZE)
-    robot.occupancy_grid(args['height'], args['width'], args['initial_p'])
+
+    while not robot.is_ready():
+        pass
+
+    robot.occupancy_grid(args['height'], args['width'],
+                         args['initial_p'], args['resolution'])
     return
 
 
