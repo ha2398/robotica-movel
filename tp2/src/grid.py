@@ -18,13 +18,12 @@ class Grid:
     OUTPUT_NAME = 'map.pgm'
     PGM_MAGIC_NUM = 'P2'
     MAX_GRAY_VALUE = 100
+    INITIAL_P = 0.5
 
-    def __init__(self, height, width, initial_p, pos, resolution):
+    def __init__(self, height, width, resolution):
         '''
             @height: (int) Number of cells that form the grid's height.
             @width: (int) Number of cells that form the grid's width.
-            @initial_p: (float) Initial blocked probability for each cell.
-            @pos: (float, float) Robot position when starting to map.
             @resolution: (float) Size of the cells side.
         '''
 
@@ -32,8 +31,7 @@ class Grid:
         self.width = width
 
         # Give the robot space to explore in all directions.
-        self.origin = pos
-        self.cells = np.full((height, width), initial_p)
+        self.cells = np.full((height, width), self.INITIAL_P)
         self.resolution = resolution
 
     def position_to_index(self, x, y):
@@ -48,10 +46,22 @@ class Grid:
         '''
 
         # Get grid cell index.
-        i = int((y - self.origin[1]) // self.resolution)
-        j = int((x - self.origin[0]) // self.resolution)
+        i = int(y / self.resolution + self.width / 2)
+        j = int(x / self.resolution + self.height / 2)
 
         return (i, j)
+
+    def is_valid_index(self, i, j):
+        '''
+            Check if a given index is valid for the grid.
+
+            @i: (int) Grid row.
+            @j: (int) Grid column.
+
+            @return: (bool) True iff the index is valid for the grid.
+        '''
+
+        return i >= 0 and j >= 0 and i < self.height and j < self.width
 
     def dump_pgm(self):
         '''
@@ -64,19 +74,17 @@ class Grid:
             map_file.write('{} {}\n'.format(self.width, self.height))
             map_file.write('{}\n'.format(self.MAX_GRAY_VALUE))
 
-            np.flipud(self.cells)
+            cells = np.flipud(self.cells)
 
             for h in range(self.height):
                 for w in range(self.width):
-                    value = self.cells[h, w]
-                    value = int(round(value, 2) * self.MAX_GRAY_VALUE)
+                    value = cells[h, w]
+                    value = int(round(1 - value, 2) * self.MAX_GRAY_VALUE)
                     map_file.write('{} '.format(value))
 
                 map_file.write('\n')
 
-            np.flipud(self.cells)
-
-    def get_occupancy_msg(self, coord):
+    def get_occupancy_msg(self):
         '''
             Create an Occupancy Grid message from grid data.
 
@@ -88,12 +96,10 @@ class Grid:
         msg.info.resolution = self.resolution
         msg.info.width = self.width
         msg.info.height = self.height
-        msg.info.origin.position.x = - self.width / 2
-        msg.info.origin.position.y = - self.height / 2
+        msg.info.origin.position.x = - self.width // 2 * self.resolution
+        msg.info.origin.position.y = - self.height // 2 * self.resolution
         msg.header.stamp = rospy.Time.now()
 
-        np.flipud(self.cells)
         msg.data = [int(x * self.MAX_GRAY_VALUE) for x in self.cells.flat]
-        np.flipud(self.cells)
 
         return msg

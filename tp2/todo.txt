@@ -1,7 +1,8 @@
 (X) Model map to numpy array.
 (X) Convert odom to cell.
-( ) Convert grid numpy array to OccupancyGrid message.
-( ) Visualize map with rviz.
-( ) Identify free and occupied cells.
+(X) Convert grid numpy array to OccupancyGrid message.
+(X) Visualize map with rviz.
+(X) Identify occupied cells.
+( ) Identify free cells.
 ( ) Update probabilities.
 ( ) Improve navigation scheme.

@@ -11,7 +11,7 @@ import rospy
 
 from geometry_msgs.msg import Twist
 from grid import Grid
-from math import atan2, degrees
+from math import atan2, cos, degrees, radians, sin
 from nav_msgs.msg import OccupancyGrid, Odometry
 from sensor_msgs.msg import LaserScan
 from tf.transformations import euler_from_quaternion
@@ -356,24 +356,65 @@ class Robot:
         self.follow_line(x, y)
         return True
 
-    def occupancy_grid(self, height, width, initial_p, resolution):
+    def set_blocked_cells(self, grid):
+        '''
+            Mark blocked cells in Occupancy Grid.
+
+            @grid: (Grid) Current Occupancy Grid object.
+        '''
+
+        x, y = self.get_robot_coordinates()
+        for i in range(len(self.laser_msg.ranges)):
+            theta = radians(i / 2) - radians(90) + self.get_yaw()
+            d = self.laser_msg.ranges[i]
+
+            if d > 7:
+                continue
+
+            x_d = x + d * cos(theta)
+            y_d = y + d * sin(theta)
+            index = grid.position_to_index(x_d, y_d)
+
+            if grid.is_valid_index(*index):
+                grid.cells[index] = 1
+
+    def set_free_cells(self, grid):
+        '''
+            Mark blocked cells in Occupancy Grid.
+
+            @grid: (Grid) Current Occupancy Grid object.
+        '''
+
+        x, y = self.get_robot_coordinates()
+        index = grid.position_to_index(x, y)
+
+        if grid.is_valid_index(*index):
+            grid.cells[index] = 0
+
+    def occupancy_grid(self, height, width, resolution):
         '''
             Run the Occupancy Grid algorithm to find the environment map.
 
             @height: (int) Number of cells that form the grid's height.
             @width: (int) Number of cells that form the grid's width.
-            @initial_p: (float) Initial blocked probability for each cell.
             @resolution: (float) Size of the cells side.
         '''
 
-        coord = self.get_robot_coordinates()
-        grid = Grid(height, width, initial_p, coord, resolution)
+        grid = Grid(height, width, resolution)
 
         goal = (5, 5)
         while not rospy.is_shutdown():
-            coord = self.get_robot_coordinates()
-            # grid.dump_pgm()
-            self.bug2(*goal)
-            msg = grid.get_occupancy_msg(coord)
+            # Exploration
+            if not self.bug2(*goal):
+                break
+
+            # Occupancy Grid algorithm.
+            self.set_free_cells(grid)
+            self.set_blocked_cells(grid)
+
+            # Create and publish message.
+            msg = grid.get_occupancy_msg()
             self.map_pub.publish(msg)
             self.rate.sleep()
+
+        grid.dump_pgm()
