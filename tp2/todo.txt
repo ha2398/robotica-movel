@@ -5,4 +5,6 @@
 (X) Identify occupied cells.
 (X) Identify free cells.
 (X) Update probabilities.
+( ) Optimize grid probability update.
 ( ) Improve navigation scheme.
+(X) Dump map to file.

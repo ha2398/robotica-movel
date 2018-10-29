@@ -20,6 +20,7 @@ class Grid:
     MAX_GRAY_VALUE = 100
     OCC_THRESHOLD = 0.6
     INITIAL_P = 0.5
+    ALPHA = 0.5  # Thickness of obstacles
 
     def __init__(self, height, width, resolution, max_laser_range, num_ranges):
         '''
@@ -37,8 +38,6 @@ class Grid:
                              self.log_odds_ratio(self.INITIAL_P))
         self.resolution = resolution
 
-        # Thickness of obstacles
-        self.alpha = 1.0
         # Width of each laser beam.
         self.beta = (max_laser_range * np.pi) / num_ranges
 
@@ -112,27 +111,6 @@ class Grid:
 
         return i >= 0 and j >= 0 and i < self.height and j < self.width
 
-    def dump_pgm(self):
-        '''
-            Dump the grid probabilities to a PGM image file.
-        '''
-
-        with open(self.OUTPUT_NAME, 'w') as map_file:
-            # Magic number
-            map_file.write('{}\n'.format(self.PGM_MAGIC_NUM))
-            map_file.write('{} {}\n'.format(self.width, self.height))
-            map_file.write('{}\n'.format(self.MAX_GRAY_VALUE))
-
-            cells = np.flipud(self.cells)
-
-            for h in range(self.height):
-                for w in range(self.width):
-                    value = cells[h, w]
-                    value = int(round(1 - value, 2) * self.MAX_GRAY_VALUE)
-                    map_file.write('{} '.format(value))
-
-                map_file.write('\n')
-
     def get_occupancy_msg(self):
         '''
             Create an Occupancy Grid message from grid data.
@@ -147,9 +125,29 @@ class Grid:
         msg.info.height = self.height
         msg.info.origin.position.x = - self.width // 2 * self.resolution
         msg.info.origin.position.y = - self.height // 2 * self.resolution
+        msg.info.origin.orientation.x = 0
+        msg.info.origin.orientation.y = 0
+        msg.info.origin.orientation.z = 0
+        msg.info.origin.orientation.w = 1
         msg.header.stamp = rospy.Time.now()
 
+        cells = np.flipud(self.cells)
         msg.data = [int(self.get_prob_from_log_odds(
-            x) * self.MAX_GRAY_VALUE) for x in self.cells.flat]
+            x) * self.MAX_GRAY_VALUE) for x in cells.flat[::-1]]
 
         return msg
+
+    def dump_pgm(self):
+        '''
+            Dump the grid probabilities to a PGM image file.
+        '''
+
+        header_str = '{}\n{} {}\n{}'.format(
+            self.PGM_MAGIC_NUM, self.width, self.height, self.MAX_GRAY_VALUE)
+
+        cells = np.rot90(self.cells)
+        cells = np.vectorize(lambda x: int(
+            (1 - self.get_prob_from_log_odds(x)) * self.MAX_GRAY_VALUE))(cells)
+
+        np.savetxt(self.OUTPUT_NAME, cells, delimiter=' ',
+                   header=header_str, comments='', fmt='%d')

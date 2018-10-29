@@ -28,5 +28,5 @@
     <param name="base_watchdog_timeout" value="0.5"/>
   </node>
 
-  <node pkg="tp2" type="tp2.py" name="tp2" args="$(arg height) $(arg width) $(arg resolution)" output="screen"></node>
+  <node pkg="tp2" type="tp2.py" name="tp2" args="$(arg height) $(arg width) $(arg resolution)" output="screen" required="true"></node>
 </launch>

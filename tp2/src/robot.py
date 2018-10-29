@@ -8,6 +8,7 @@ functionalities.
 '''
 
 import numpy as np
+import roslaunch
 import rospy
 
 from geometry_msgs.msg import Twist
@@ -15,7 +16,6 @@ from grid import Grid
 from math import atan2, cos, degrees, radians, sin
 from nav_msgs.msg import OccupancyGrid, Odometry
 from sensor_msgs.msg import LaserScan
-from time import time
 from tf.transformations import euler_from_quaternion
 
 
@@ -32,7 +32,7 @@ class Robot:
     ANGLE_TOLERANCE = 0.005
 
     # Tolerance constants.
-    MIN_OBJ_DIST = 0.6
+    MIN_OBJ_DIST = 0.7
     LINE_DIST_TOLERANCE = 0.1
     GOAL_TOLERANCE = 0.1
     MIN_DIST_IMPROVEMENT = 0.5
@@ -402,23 +402,17 @@ class Robot:
 
         pos = np.array(self.get_robot_coordinates())
 
-        t0 = time()
-
         # Array with distances from robot to center of mass of all cells.
-        cell_distances = np.array([[np.linalg.norm(np.array(
+        cell_distances = np.asarray([[np.linalg.norm(np.array(
             grid.center_of_mass_from_index(i, j) - pos))
             for i in range(grid.height)] for j in range(grid.width)])
 
         # Array with angles between the robot's orientation and the center of
         # mass of all cells.
-        cell_angles = np.array([[np.arctan2(*tuple(
+        cell_angles = np.asarray([[np.arctan2(*tuple(
             grid.center_of_mass_from_index(i, j)[::-1] - pos[::-1]))
             for i in range(grid.height)] for j in range(grid.width)])
 
-        t1 = time()
-        print 'Time to create arrays:', t1 - t0
-
-        t0 = time()
         yaw = self.get_yaw()
         for i in range(len(self.laser_msg.ranges)):
             d = self.laser_msg.ranges[i]  # Observed range
@@ -429,22 +423,18 @@ class Robot:
             # angle.
             free_cells = np.logical_and(
                 np.abs(cell_angles - theta) <= (grid.beta / 2),
-                (cell_distances < (d - grid.alpha / 2)))
+                (cell_distances < (d - grid.ALPHA / 2)))
 
             # Occupied cells are further from the robot but still within the
             # beam angle.
             occupied_cells = np.logical_and(
                 np.abs(cell_angles - theta) <= (grid.beta / 2),
-                (np.abs(cell_distances - d) <= grid.alpha / 2))
+                (np.abs(cell_distances - d) <= grid.ALPHA / 2))
 
             # Update the log-odds ratio for all cells accordingly to their
             # type (free or occupied).
             grid.cells[free_cells] += grid.l_free
             grid.cells[occupied_cells] += grid.l_occ
-
-        t1 = time()
-        print 'Time to update grid:', t1 - t0
-        print
 
     def occupancy_grid(self, height, width, resolution):
         '''
@@ -459,11 +449,15 @@ class Robot:
         num_ranges = len(self.laser_msg.ranges)
         grid = Grid(height, width, resolution, max_laser_range, num_ranges)
 
-        goal = (5, 5)
+        goals = [(6, -3)]
+        goal = goals.pop()
         while not rospy.is_shutdown():
             # Exploration
             if not self.bug2(*goal):
-                break
+                if len(goals) == 0:
+                    break
+
+                goal = goals.pop()
 
             # Occupancy Grid algorithm.
             self.apply_measurements_to_grid(grid)
