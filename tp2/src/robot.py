@@ -7,6 +7,7 @@ Class Robot implements a simple robot with navigation and mapping
 functionalities.
 '''
 
+import numpy as np
 import rospy
 
 from geometry_msgs.msg import Twist
@@ -14,6 +15,7 @@ from grid import Grid
 from math import atan2, cos, degrees, radians, sin
 from nav_msgs.msg import OccupancyGrid, Odometry
 from sensor_msgs.msg import LaserScan
+from time import time
 from tf.transformations import euler_from_quaternion
 
 
@@ -391,6 +393,59 @@ class Robot:
         if grid.is_valid_index(*index):
             grid.cells[index] = 0
 
+    def apply_measurements_to_grid(self, grid):
+        '''
+            Update the grid map with the new measurements from laser sensor.
+
+            @grid: (Grid) Current Occupancy Grid object.
+        '''
+
+        pos = np.array(self.get_robot_coordinates())
+
+        t0 = time()
+
+        # Array with distances from robot to center of mass of all cells.
+        cell_distances = np.array([[np.linalg.norm(np.array(
+            grid.center_of_mass_from_index(i, j) - pos))
+            for i in range(grid.height)] for j in range(grid.width)])
+
+        # Array with angles between the robot's orientation and the center of
+        # mass of all cells.
+        cell_angles = np.array([[np.arctan2(*tuple(
+            grid.center_of_mass_from_index(i, j)[::-1] - pos[::-1]))
+            for i in range(grid.height)] for j in range(grid.width)])
+
+        t1 = time()
+        print 'Time to create arrays:', t1 - t0
+
+        t0 = time()
+        yaw = self.get_yaw()
+        for i in range(len(self.laser_msg.ranges)):
+            d = self.laser_msg.ranges[i]  # Observed range
+            # Angle between robot and obstacle
+            theta = np.radians(i / 2) - np.radians(90) + yaw
+
+            # Free cells are closer to the robot but still within the beam
+            # angle.
+            free_cells = np.logical_and(
+                np.abs(cell_angles - theta) <= (grid.beta / 2),
+                (cell_distances < (d - grid.alpha / 2)))
+
+            # Occupied cells are further from the robot but still within the
+            # beam angle.
+            occupied_cells = np.logical_and(
+                np.abs(cell_angles - theta) <= (grid.beta / 2),
+                (np.abs(cell_distances - d) <= grid.alpha / 2))
+
+            # Update the log-odds ratio for all cells accordingly to their
+            # type (free or occupied).
+            grid.cells[free_cells] += grid.l_free
+            grid.cells[occupied_cells] += grid.l_occ
+
+        t1 = time()
+        print 'Time to update grid:', t1 - t0
+        print
+
     def occupancy_grid(self, height, width, resolution):
         '''
             Run the Occupancy Grid algorithm to find the environment map.
@@ -400,7 +455,9 @@ class Robot:
             @resolution: (float) Size of the cells side.
         '''
 
-        grid = Grid(height, width, resolution)
+        max_laser_range = 8.0
+        num_ranges = len(self.laser_msg.ranges)
+        grid = Grid(height, width, resolution, max_laser_range, num_ranges)
 
         goal = (5, 5)
         while not rospy.is_shutdown():
@@ -409,8 +466,7 @@ class Robot:
                 break
 
             # Occupancy Grid algorithm.
-            self.set_free_cells(grid)
-            self.set_blocked_cells(grid)
+            self.apply_measurements_to_grid(grid)
 
             # Create and publish message.
             msg = grid.get_occupancy_msg()

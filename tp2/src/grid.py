@@ -18,21 +18,54 @@ class Grid:
     OUTPUT_NAME = 'map.pgm'
     PGM_MAGIC_NUM = 'P2'
     MAX_GRAY_VALUE = 100
+    OCC_THRESHOLD = 0.6
     INITIAL_P = 0.5
 
-    def __init__(self, height, width, resolution):
+    def __init__(self, height, width, resolution, max_laser_range, num_ranges):
         '''
             @height: (int) Number of cells that form the grid's height.
             @width: (int) Number of cells that form the grid's width.
             @resolution: (float) Size of the cells side.
+            @max_laser_range: (float) Max distance of laser ranges.
+            @num_ranges: (int) Number of laser beams in robot's sensor.
         '''
 
         self.height = height
         self.width = width
 
-        # Give the robot space to explore in all directions.
-        self.cells = np.full((height, width), self.INITIAL_P)
+        self.cells = np.full((height, width),
+                             self.log_odds_ratio(self.INITIAL_P))
         self.resolution = resolution
+
+        # Thickness of obstacles
+        self.alpha = 1.0
+        # Width of each laser beam.
+        self.beta = (max_laser_range * np.pi) / num_ranges
+
+        self.l_occ = self.log_odds_ratio(self.OCC_THRESHOLD)
+        self.l_free = self.log_odds_ratio(1 - self.OCC_THRESHOLD)
+
+    def log_odds_ratio(self, p):
+        '''
+            Calculate the log odds ratio for a give probability.
+
+            @p: (float) Probability.
+
+            @return: (float) Log odds ratio for @p.
+        '''
+
+        return np.log(p / (1 - p))
+
+    def get_prob_from_log_odds(self, l):
+        '''
+            Retrieve probability from log odds ratio.
+
+            @l: (float) Log odds ratio.
+
+            @return: (float) Probability.
+        '''
+
+        return 1 - (1 / (1 + np.exp(l)))
 
     def position_to_index(self, x, y):
         '''
@@ -50,6 +83,22 @@ class Grid:
         j = int(x / self.resolution + self.height / 2)
 
         return (i, j)
+
+    def center_of_mass_from_index(self, i, j):
+        '''
+            Get the coordinates of the center of mass of the cell with the
+            given index.
+
+            @i: (int) Grid row.
+            @j: (int) Grid column.
+
+            @return: (float, float) Coordintes of the cell's center of mass.
+        '''
+
+        x = self.resolution * (j - (self.height + 1) / 2.)
+        y = self.resolution * (i - (self.width + 1) / 2.)
+
+        return x, y
 
     def is_valid_index(self, i, j):
         '''
@@ -100,6 +149,7 @@ class Grid:
         msg.info.origin.position.y = - self.height // 2 * self.resolution
         msg.header.stamp = rospy.Time.now()
 
-        msg.data = [int(x * self.MAX_GRAY_VALUE) for x in self.cells.flat]
+        msg.data = [int(self.get_prob_from_log_odds(
+            x) * self.MAX_GRAY_VALUE) for x in self.cells.flat]
 
         return msg

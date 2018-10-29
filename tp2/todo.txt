@@ -3,6 +3,6 @@
 (X) Convert grid numpy array to OccupancyGrid message.
 (X) Visualize map with rviz.
 (X) Identify occupied cells.
-( ) Identify free cells.
-( ) Update probabilities.
+(X) Identify free cells.
+(X) Update probabilities.
 ( ) Improve navigation scheme.
