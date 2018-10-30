@@ -7,6 +7,7 @@ Class Grid models the robot environment as a grid of cells.
 '''
 
 from nav_msgs.msg import OccupancyGrid
+from scipy import ndimage
 
 import numpy as np
 import rospy
@@ -91,7 +92,7 @@ class Grid:
             @i: (int) Grid row.
             @j: (int) Grid column.
 
-            @return: (float, float) Coordintes of the cell's center of mass.
+            @return: (float, float) Coordinates of the cell's center of mass.
         '''
 
         x = self.resolution * (j - (self.height + 1) / 2.)
@@ -110,6 +111,61 @@ class Grid:
         '''
 
         return i >= 0 and j >= 0 and i < self.height and j < self.width
+
+    def get_neighbours(self, array, index):
+        '''
+            Get neighbour cells of the cell with given index in an array.
+
+            @array: (numpy array) Array.
+            @index: (int, int) Index of cell.
+
+            @return: (numpy array) Array with the indices of neighbour cells.
+        '''
+
+        matrix = np.array(array)
+        indices = tuple(np.transpose(np.atleast_2d(index)))
+        arr_shape = np.shape(matrix)
+        dist = np.ones(arr_shape)
+        dist[indices] = 0
+        dist = ndimage.distance_transform_cdt(dist, metric='chessboard')
+        nb_indices = np.transpose(np.nonzero(dist == 1))
+        return [tuple(x) for x in nb_indices]
+
+    def get_closest_frontier_cell(self, pos):
+        '''
+            Get closest frontier cell coordinates.
+
+            @pos: (float, float) Robot current position.
+
+            @return: (float, float) Closest frontier cell coordinates.
+        '''
+
+        probs = self.get_prob_from_log_odds(self.cells)
+        print 'Probs:', probs
+        visited = np.full((self.height, self.width), False)
+        queue = [self.position_to_index(*pos)]
+        occ_prob = self.OCC_THRESHOLD
+        free_prob = 1 - occ_prob
+
+        while len(queue) > 0:  # BFS
+            cur_cell = queue.pop(0)
+
+            if visited[cur_cell]:
+                continue
+
+            neighbours = self.get_neighbours(probs, cur_cell)
+
+            if probs[cur_cell] <= free_prob:  # Free cell
+                while len(neighbours) > 0:
+                    n = neighbours.pop(0)
+                    p = probs[n]
+
+                    if p > free_prob and p < occ_prob:  # Unknown cell
+                        return cur_cell
+            else:
+                queue += neighbours
+
+        return None
 
     def get_occupancy_msg(self):
         '''

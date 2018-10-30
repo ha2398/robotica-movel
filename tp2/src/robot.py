@@ -8,12 +8,11 @@ functionalities.
 '''
 
 import numpy as np
-import roslaunch
 import rospy
 
 from geometry_msgs.msg import Twist
 from grid import Grid
-from math import atan2, cos, degrees, radians, sin
+from math import atan2, degrees
 from nav_msgs.msg import OccupancyGrid, Odometry
 from sensor_msgs.msg import LaserScan
 from tf.transformations import euler_from_quaternion
@@ -51,7 +50,8 @@ class Robot:
         self.vel_pub = rospy.Publisher('/cmd_vel', Twist,
                                        queue_size=ros_queue_size)
         rospy.Subscriber('/base_scan', LaserScan, self.laser_callback)
-        rospy.Subscriber('/odom', Odometry, self.odom_callback)
+        rospy.Subscriber('/base_pose_ground_truth',
+                         Odometry, self.odom_callback)
         self.map_pub = rospy.Publisher('/map', OccupancyGrid,
                                        queue_size=ros_queue_size)
         self.rate = rospy.Rate(robot_rate)
@@ -358,41 +358,6 @@ class Robot:
         self.follow_line(x, y)
         return True
 
-    def set_blocked_cells(self, grid):
-        '''
-            Mark blocked cells in Occupancy Grid.
-
-            @grid: (Grid) Current Occupancy Grid object.
-        '''
-
-        x, y = self.get_robot_coordinates()
-        for i in range(len(self.laser_msg.ranges)):
-            theta = radians(i / 2) - radians(90) + self.get_yaw()
-            d = self.laser_msg.ranges[i]
-
-            if d > 7:
-                continue
-
-            x_d = x + d * cos(theta)
-            y_d = y + d * sin(theta)
-            index = grid.position_to_index(x_d, y_d)
-
-            if grid.is_valid_index(*index):
-                grid.cells[index] = 1
-
-    def set_free_cells(self, grid):
-        '''
-            Mark blocked cells in Occupancy Grid.
-
-            @grid: (Grid) Current Occupancy Grid object.
-        '''
-
-        x, y = self.get_robot_coordinates()
-        index = grid.position_to_index(x, y)
-
-        if grid.is_valid_index(*index):
-            grid.cells[index] = 0
-
     def apply_measurements_to_grid(self, grid):
         '''
             Update the grid map with the new measurements from laser sensor.
@@ -416,7 +381,7 @@ class Robot:
         yaw = self.get_yaw()
         for i in range(len(self.laser_msg.ranges)):
             d = self.laser_msg.ranges[i]  # Observed range
-            # Angle between robot and obstacle
+            # Angle between robot and the end of beam.
             theta = np.radians(i / 2) - np.radians(90) + yaw
 
             # Free cells are closer to the robot but still within the beam
@@ -436,6 +401,20 @@ class Robot:
             grid.cells[free_cells] += grid.l_free
             grid.cells[occupied_cells] += grid.l_occ
 
+        return
+
+    def publish_occupancy_grid(self, grid):
+        '''
+            Create and publish Occupancy Grid message.
+
+            @grid: (Grid) Current Occupancy Grid object.
+        '''
+
+        # Create and publish message.
+        msg = grid.get_occupancy_msg()
+        self.map_pub.publish(msg)
+        return
+
     def occupancy_grid(self, height, width, resolution):
         '''
             Run the Occupancy Grid algorithm to find the environment map.
@@ -449,22 +428,21 @@ class Robot:
         num_ranges = len(self.laser_msg.ranges)
         grid = Grid(height, width, resolution, max_laser_range, num_ranges)
 
-        goals = [(6, -3)]
-        goal = goals.pop()
+        goal = None
         while not rospy.is_shutdown():
-            # Exploration
-            if not self.bug2(*goal):
-                if len(goals) == 0:
-                    break
-
-                goal = goals.pop()
-
             # Occupancy Grid algorithm.
             self.apply_measurements_to_grid(grid)
+            self.publish_occupancy_grid(grid)
 
-            # Create and publish message.
-            msg = grid.get_occupancy_msg()
-            self.map_pub.publish(msg)
+            # Exploration
+            if goal is None or not self.bug2(*goal):
+                goal = grid.get_closest_frontier_cell(
+                    self.get_robot_coordinates())
+                print 'New goal:', goal
+
+                if goal is None:
+                    break
+
             self.rate.sleep()
 
         grid.dump_pgm()

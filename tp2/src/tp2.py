@@ -10,10 +10,12 @@ import rospy
 
 from robot import Robot
 from sys import argv
+from time import sleep
 
 
 RATE = 10
 QUEUE_SIZE = 10
+EXIT_TIMER = 5
 
 
 def get_args():
@@ -43,6 +45,8 @@ def run():
         pass
 
     robot.occupancy_grid(args['height'], args['width'], args['resolution'])
+    print 'Done mapping. Exiting in', EXIT_TIMER, 's.'
+    sleep(EXIT_TIMER)
     return
 
 
