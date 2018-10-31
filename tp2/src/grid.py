@@ -19,7 +19,7 @@ class Grid:
     OUTPUT_NAME = 'map.pgm'
     PGM_MAGIC_NUM = 'P2'
     MAX_GRAY_VALUE = 100
-    OCC_THRESHOLD = 0.6
+    OCC_THRESHOLD = 0.7
     INITIAL_P = 0.5
     ALPHA = 0.5  # Thickness of obstacles
 
@@ -131,19 +131,23 @@ class Grid:
         nb_indices = np.transpose(np.nonzero(dist == 1))
         return [tuple(x) for x in nb_indices]
 
-    def get_closest_frontier_cell(self, pos):
+    def get_random_frontier_cell(self):
         '''
-            Get closest frontier cell coordinates.
-
-            @pos: (float, float) Robot current position.
+            Get random frontier cell coordinates.
 
             @return: (float, float) Closest frontier cell coordinates.
         '''
 
-        probs = self.get_prob_from_log_odds(self.cells)
-        print 'Probs:', probs
+        probs = np.flipud(self.get_prob_from_log_odds(self.cells))
         visited = np.full((self.height, self.width), False)
-        queue = [self.position_to_index(*pos)]
+
+        # Create random search starting point.
+        rand_cell_i = np.random.randint(0, self.height)
+        rand_cell_j = np.random.randint(0, self.width)
+        random_starting_point = self.center_of_mass_from_index(
+            rand_cell_i, rand_cell_j)
+
+        queue = [self.position_to_index(*random_starting_point)]
         occ_prob = self.OCC_THRESHOLD
         free_prob = 1 - occ_prob
 
@@ -153,7 +157,10 @@ class Grid:
             if visited[cur_cell]:
                 continue
 
+            visited[cur_cell] = True
+
             neighbours = self.get_neighbours(probs, cur_cell)
+            queue += neighbours
 
             if probs[cur_cell] <= free_prob:  # Free cell
                 while len(neighbours) > 0:
@@ -161,9 +168,7 @@ class Grid:
                     p = probs[n]
 
                     if p > free_prob and p < occ_prob:  # Unknown cell
-                        return cur_cell
-            else:
-                queue += neighbours
+                        return self.center_of_mass_from_index(*cur_cell)
 
         return None
 

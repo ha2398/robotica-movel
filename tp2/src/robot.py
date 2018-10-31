@@ -17,6 +17,8 @@ from nav_msgs.msg import OccupancyGrid, Odometry
 from sensor_msgs.msg import LaserScan
 from tf.transformations import euler_from_quaternion
 
+np.warnings.filterwarnings('ignore')
+
 
 class Robot:
     '''
@@ -26,26 +28,28 @@ class Robot:
     # Speed constants
     kx, kt = 1, 2
 
-    GOAL = None
-    SET_FRONT = False
-    ANGLE_TOLERANCE = 0.005
-
     # Tolerance constants.
     MIN_OBJ_DIST = 0.7
-    LINE_DIST_TOLERANCE = 0.1
-    GOAL_TOLERANCE = 0.1
+    DIST_TOLERANCE = 0.2
     MIN_DIST_IMPROVEMENT = 0.5
-
-    # Bug 2 variables
-    OBSTACLE = False
-    DIST_QH = None
+    ANGLE_TOLERANCE = 0.005
 
     # Ranges
     FRONT_LEFT = 240
     FRONT_RIGHT = 120
     RIGHT_START = 150
 
+    # Occupancy Grid
+    MAX_FRONTIERS = 5
+
     def __init__(self, robot_rate, ros_queue_size):
+        # Navigation variables
+        self.set_front = False
+        self.obstacle = False
+        self.dist_qh = None
+        self.hit_point = None
+        self.out_of_hit_point = None
+
         # Messages
         self.vel_pub = rospy.Publisher('/cmd_vel', Twist,
                                        queue_size=ros_queue_size)
@@ -262,9 +266,9 @@ class Robot:
         vel = Twist()
         ex, et = self.get_error(x, y)
 
-        if not self.SET_FRONT:
+        if not self.set_front:
             if abs(et) < self.ANGLE_TOLERANCE:
-                self.SET_FRONT = True
+                self.set_front = True
             else:
                 vel.linear.x = 0
                 vel.angular.z = self.kt * et
@@ -273,9 +277,10 @@ class Robot:
                     vel.angular.z = self.kt * et * -1
         else:
             if self.is_blocked():
-                self.OBSTACLE = True
-                self.DIST_QH = self.get_dist_to_goal(x, y)
-                self.SET_FRONT = False
+                self.obstacle = True
+                self.hit_point = self.get_robot_coordinates()
+                self.dist_qh = self.get_dist_to_goal(x, y)
+                self.set_front = False
 
                 vel.linear.x = 0
                 vel.angular.z = 0
@@ -302,21 +307,40 @@ class Robot:
         # Check if robot can move to GOAL again.
         dist_line = self.get_distance_to_line(x, y)
         dist_goal = self.get_dist_to_goal(x, y)
-        if dist_line < self.LINE_DIST_TOLERANCE and \
-                dist_goal + self.MIN_DIST_IMPROVEMENT < self.DIST_QH:
+        dist_hit_point = self.get_dist_to_goal(*self.hit_point)
 
-            self.OBSTACLE = False
+        # Check if robot has left the hit point.
+        # This is necessary to asses if a goal is unreachable, when the robot
+        # gets to the same hit point again.
+        if self.out_of_hit_point is None:
+            if dist_hit_point > self.MIN_DIST_IMPROVEMENT:
+                self.out_of_hit_point = True
+
+        if self.out_of_hit_point:
+            if dist_hit_point < self.DIST_TOLERANCE:
+                self.obstacle = False
+                self.out_of_hit_point = None
+                vel.linear.x = 0
+                vel.angular.z = 0
+                self.cmd_vel = vel
+                self.move()
+                return False
+
+        if dist_line < self.DIST_TOLERANCE and \
+                dist_goal + self.MIN_DIST_IMPROVEMENT < self.dist_qh:
+
+            self.obstacle = False
             vel.linear.x = 0
             vel.angular.z = 0
             self.cmd_vel = vel
             self.move()
-            return
+            return True
 
         if self.is_blocked():  # Turning left
             vel.angular.z = self.kt
             self.cmd_vel = vel
             self.move()
-            return
+            return True
         else:
             vel.linear.x = self.kx
 
@@ -326,11 +350,11 @@ class Robot:
                 vel.angular.z = - self.kt * right_distance
                 self.cmd_vel = vel
                 self.move()
-                return
+                return True
 
             self.cmd_vel = vel
             self.move()
-            return
+            return True
 
     def bug2(self, x, y):
         '''
@@ -341,19 +365,26 @@ class Robot:
             @y: (float) Desired position y coordinate.
         '''
 
-        if self.get_dist_to_goal(x, y) < self.GOAL_TOLERANCE:
+        # Robot reached goal.
+        if self.get_dist_to_goal(x, y) < self.DIST_TOLERANCE:
             # Line coefficients.
             self.line_a, self.line_b, self.line_c = None, None, None
             self.line_set = False
             return False
 
+        # Set line to goal and follow it.
         if not self.line_set:
             self.set_goal_line(x, y)
             self.line_set = True
 
-        if self.OBSTACLE:
-            self.outline_obstacle(x, y)
-            return True
+        # Robot is blocked by obstacle.
+        if self.obstacle:
+            if self.outline_obstacle(x, y):
+                return True
+            else:
+                self.line_a, self.line_b, self.line_c = None, None, None
+                self.line_set = False
+                return False
 
         self.follow_line(x, y)
         return True
@@ -429,6 +460,7 @@ class Robot:
         grid = Grid(height, width, resolution, max_laser_range, num_ranges)
 
         goal = None
+        frontiers_explored = 0
         while not rospy.is_shutdown():
             # Occupancy Grid algorithm.
             self.apply_measurements_to_grid(grid)
@@ -436,11 +468,10 @@ class Robot:
 
             # Exploration
             if goal is None or not self.bug2(*goal):
-                goal = grid.get_closest_frontier_cell(
-                    self.get_robot_coordinates())
-                print 'New goal:', goal
+                goal = grid.get_random_frontier_cell()
+                frontiers_explored += 1
 
-                if goal is None:
+                if goal is None or frontiers_explored > self.MAX_FRONTIERS:
                     break
 
             self.rate.sleep()
