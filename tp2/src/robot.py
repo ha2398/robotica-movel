@@ -29,7 +29,7 @@ class Robot:
     kx, kt = 1, 2
 
     # Tolerance constants.
-    MIN_OBJ_DIST = 0.7
+    MIN_OBJ_DIST = 0.8
     DIST_TOLERANCE = 0.2
     MIN_DIST_IMPROVEMENT = 0.5
     ANGLE_TOLERANCE = 0.005
@@ -38,9 +38,6 @@ class Robot:
     FRONT_LEFT = 240
     FRONT_RIGHT = 120
     RIGHT_START = 150
-
-    # Occupancy Grid
-    MAX_FRONTIERS = 5
 
     def __init__(self, robot_rate, ros_queue_size):
         # Navigation variables
@@ -401,13 +398,13 @@ class Robot:
         # Array with distances from robot to center of mass of all cells.
         cell_distances = np.asarray([[np.linalg.norm(np.array(
             grid.center_of_mass_from_index(i, j) - pos))
-            for i in range(grid.height)] for j in range(grid.width)])
+            for i in range(grid.width)] for j in range(grid.height)])
 
         # Array with angles between the robot's orientation and the center of
         # mass of all cells.
         cell_angles = np.asarray([[np.arctan2(*tuple(
             grid.center_of_mass_from_index(i, j)[::-1] - pos[::-1]))
-            for i in range(grid.height)] for j in range(grid.width)])
+            for i in range(grid.width)] for j in range(grid.height)])
 
         yaw = self.get_yaw()
         for i in range(len(self.laser_msg.ranges)):
@@ -446,13 +443,14 @@ class Robot:
         self.map_pub.publish(msg)
         return
 
-    def occupancy_grid(self, height, width, resolution):
+    def occupancy_grid(self, height, width, resolution, frontiers):
         '''
             Run the Occupancy Grid algorithm to find the environment map.
 
             @height: (int) Number of cells that form the grid's height.
             @width: (int) Number of cells that form the grid's width.
             @resolution: (float) Size of the cells side.
+            @frontiers: (int) Number of random frontier points to explore.
         '''
 
         max_laser_range = 8.0
@@ -471,7 +469,7 @@ class Robot:
                 goal = grid.get_random_frontier_cell()
                 frontiers_explored += 1
 
-                if goal is None or frontiers_explored > self.MAX_FRONTIERS:
+                if goal is None or frontiers_explored > frontiers:
                     break
 
             self.rate.sleep()

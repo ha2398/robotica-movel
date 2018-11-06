@@ -26,7 +26,8 @@ def get_args():
     args = {
         'height': int(argv[1]),
         'width': int(argv[2]),
-        'resolution': float(argv[3])
+        'resolution': float(argv[3]),
+        'frontiers': int(argv[4])
     }
 
     return args
@@ -44,7 +45,8 @@ def run():
     while not robot.is_ready():
         pass
 
-    robot.occupancy_grid(args['height'], args['width'], args['resolution'])
+    robot.occupancy_grid(args['height'], args['width'], args['resolution'],
+                         args['frontiers'])
     print 'Done mapping. Exiting in', EXIT_TIMER, 's.'
     sleep(EXIT_TIMER)
     return
