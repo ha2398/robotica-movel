@@ -1,0 +1,7 @@
+( ) Model environment as grid of sampling points.
+( ) Model program input and output.
+( ) Program genetic algorithm library.
+( ) Implement OP.
+( ) Implement COP.
+( ) Implement TOP.
+( ) Implement CTOP.
