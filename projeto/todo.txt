@@ -1,5 +1,9 @@
 ( ) Model environment as grid of sampling points.
+	( ) Generate rewards randomly for a map.
+	( ) Visualize as heatmap.
+	( ) Combine map visualization, heatmap and paths found.
 ( ) Model program input and output.
+	( ) Input -> file with sampling points.
 ( ) Program genetic algorithm library.
 ( ) Implement OP.
 ( ) Implement COP.
