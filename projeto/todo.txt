@@ -1,3 +1,5 @@
+1) TODO
+
 ( ) Model environment as grid of sampling points.
 	(X) Generate rewards randomly for a map.
 	(X) Visualize as heatmap.
@@ -9,3 +11,20 @@
 ( ) Implement COP.
 ( ) Implement TOP.
 ( ) Implement CTOP.
+
+2) IMPLEMENTATION CHOICES
+
+- Input:
+	- Matrix to represent sampling points.
+	- Matrix to represent occupancy grid map.
+
+- Sampling points:
+	- Represented by their grid index. (0, 0) is the uppermost leftmost.
+
+- Path:
+	- Random paths are generated considering only free cells in world, through an Occupancy Grid array obtained before hand.
+	- Cost is given by sum of euclidean distances between vertices.
+
+- Chromosome representation:
+	- Array of sampling points.
+	- Represents the robot's path.
