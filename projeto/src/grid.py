@@ -10,6 +10,10 @@ Orienteering Problem
 grid.py: Map<->Grid utilities.
 '''
 
+import numpy as np
+
+from scipy import ndimage
+
 
 def index_to_center_of_mass(i, j, array):
     '''
@@ -44,3 +48,23 @@ def position_to_index(x, y, array):
     height = array.shape[0]
 
     return int((height - 1) / 2 - y), int(x + (width - 1) / 2)
+
+
+def get_neighbours(array, index):
+        '''
+            Get neighbour cells of the cell with given index in an array.
+
+            @array: (numpy array) Array.
+            @index: (int, int) Index of cell.
+
+            @return: (numpy array) Array with the indices of neighbour cells.
+        '''
+
+        matrix = np.array(array)
+        indices = tuple(np.transpose(np.atleast_2d(index)))
+        arr_shape = np.shape(matrix)
+        dist = np.ones(arr_shape)
+        dist[indices] = 0
+        dist = ndimage.distance_transform_cdt(dist, metric='chessboard')
+        nb_indices = np.transpose(np.nonzero(dist == 1))
+        return [tuple(x) for x in nb_indices]

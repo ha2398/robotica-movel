@@ -150,12 +150,39 @@ class GeneticAlgorithm:
         else:  # No, they don't.
             return parent1, parent2
 
-    def mutate(self):
+    def mutate(self, chromosome):
         '''
             Mutate an individual's genes.
+
+            @chromosome: ((int, int) list) Chromosome to mutate.
+
+            @return: ((int, int) list) Mutated chromosome.
         '''
 
-        pass  # TODO
+        # Get a random vertex (excluding start and end points)
+        mutate_point = np.random.choice(range(len(chromosome[1:-1])))
+        mutate_vertex = chromosome[1:-1][mutate_point]
+        mutate_point = chromosome.index(mutate_vertex)
+
+        neighbour_indices = get_neighbours(self.sampling_points, mutate_vertex)
+
+        # Create mutations
+        mutation = [tuple(t) for t in chromosome]
+        mutations = [[tuple(t) for t in chromosome]]
+        for vertex in neighbour_indices:
+            # Ignore neighbour vertices already in chromosome
+            if index in chromosome:
+                continue
+
+            mutation[mutate_point] = index
+
+            # Ignore mutations that violate the cost limit
+            if self.get_path_cost(mutation) > self.max_cost:
+                continue
+
+            mutations.append([tuple(t) for t in mutation])
+
+        return self.get_fittest_chromosome(mutations)
 
     def evaluate_chromosome(self, chromosome):
         '''
