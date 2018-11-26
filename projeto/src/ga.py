@@ -114,13 +114,41 @@ class GeneticAlgorithm:
 
         pass  # TODO
 
-    def crossover(self):
+    def crossover(self, parent1, parent2):
         '''
             Perform the crossover using two parents to generate two new
             children individuals.
+
+            @parent1: ((int, int) list) First parent.
+            @parent2: ((int, int) list) Second parent.
+
+            @return:
+                ((int, int) list) First child,
+                ((int, int) list) Second child.
         '''
 
-        pass  # TODO
+        # Check if the two parents share genes.
+        if not set(parent1).isdisjoint(set(parent2)):  # Yes, they do.
+            common_vertices = list(set(parent1).intersection(set(parent2)))
+
+            # Randomly select a splitting point.
+            random_common_vertex = np.random.choice(
+                range(len(common_vertices)))
+            v = common_vertices[random_common_vertex]
+
+            index_v_1 = parent1.index(v)
+            index_v_2 = parent2.index(v)
+
+            tail_1 = parent1[index_v_1:]
+            tail_2 = parent2[index_v_2:]
+
+            # Swap tails
+            child1 = [tuple(t) for t in parent1[:index_v_1] + tail_2]
+            child2 = [tuple(t) for t in parent2[:index_v_2] + tail_1]
+
+            return child1, child2
+        else:  # No, they don't.
+            return parent1, parent2
 
     def mutate(self):
         '''
