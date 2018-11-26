@@ -13,7 +13,8 @@ pf.py: Main program.
 import numpy as np
 import rospy
 
-from nav_msgs.msg import MapMetaData, OccupancyGrid
+from ga import GeneticAlgorithm
+from robot import Robot
 from sys import argv
 
 
@@ -27,7 +28,13 @@ def get_args():
     '''
 
     args = {
-        'costmap': argv[1]
+        'rewards': argv[1],
+        'map': argv[2],
+        'max_cost': float(argv[3]),
+        'start_x': float(argv[4]),
+        'start_y': float(argv[5]),
+        'end_x': float(argv[6]),
+        'end_y': float(argv[7])
     }
 
     return args
@@ -39,23 +46,30 @@ def run():
     '''
 
     args = get_args()
-    print(args['costmap'])
-    costmap = np.genfromtxt(args['costmap'], delimiter=' ')
-
     rospy.init_node('pf', anonymous=True)
-    map_pub = rospy.Publisher('/map', OccupancyGrid, queue_size=QUEUE_SIZE)
-    rate = rospy.Rate(RATE)
 
-    while True:
-        msg = OccupancyGrid()
-        data = costmap.ravel()
-        msg.data = data
-        msg.info = MapMetaData()
-        msg.info.height = costmap.shape[0]
-        msg.info.width = costmap.shape[1]
-        msg.info.resolution = 1
-        map_pub.publish(msg)
-        rate.sleep()
+    # Load input
+    sampling_points = np.genfromtxt(
+        args['rewards'], delimiter=' ', dtype=float)
+    environment_map = np.genfromtxt(args['map'], delimiter=' ', dtype=int)
+
+    # Run the GA heuristic to get robot path.
+    ga_op = GeneticAlgorithm(
+        sampling_points, environment_map, args['max_cost'])
+
+    path = ga_op.run((args['start_x'], args['start_y']),
+                     (args['end_x'], args['end_y']))
+
+    robot = Robot(RATE, QUEUE_SIZE)
+
+    while not robot.is_ready():
+        pass
+
+    goal = None
+    # Control robot through the path.
+    while not rospy.is_shutdown() and len(path) > 0:
+        if goal is None or not robot.bug2(*goal):
+            goal = path.pop(0)
 
     return
 

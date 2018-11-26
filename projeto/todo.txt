@@ -1,13 +1,15 @@
 1) TODO
 
-( ) Model environment as grid of sampling points.
+(X) Model environment as grid of sampling points.
 	(X) Generate rewards randomly for a map.
 	(X) Visualize as heatmap.
 	( ) Combine map visualization, heatmap and paths found.
 ( ) Model program input and output.
-	( ) Input -> file with sampling points.
-( ) Program genetic algorithm library.
-( ) Implement OP.
+(X) Program genetic algorithm module.
+(X) Implement OP.
+
+- Optional:
+
 ( ) Implement COP.
 ( ) Implement TOP.
 ( ) Implement CTOP.

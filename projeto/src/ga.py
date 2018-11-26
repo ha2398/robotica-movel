@@ -58,7 +58,8 @@ class GeneticAlgorithm:
         while generation < self.GEN_NUMBER:
             population = self.select_new_population(population)
 
-        return self.get_fittest_chromosome(population)
+        path_indices = self.get_fittest_chromosome(population)
+        return [index_to_center_of_mass(*v) for v in path_indices]
 
     def get_path_cost(self, path):
         '''
