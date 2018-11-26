@@ -52,7 +52,13 @@ class GeneticAlgorithm:
             @return: ((int, int) list) Fittest chromosome.
         '''
 
-        pass  # TODO
+        population = self.initialize_population(start, finish)
+        generation = 0
+
+        while generation < self.GEN_NUMBER:
+            population = self.select_new_population(population)
+
+        return self.get_fittest_chromosome(population)
 
     def get_path_cost(self, path):
         '''
