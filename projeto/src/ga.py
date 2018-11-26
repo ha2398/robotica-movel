@@ -18,6 +18,14 @@ from grid import *
 
 class GeneticAlgorithm:
 
+    # Fixed from literature
+    POP_SIZE = 450
+    GEN_NUMBER = 35
+    TOURNAMENT_SIZE = 3
+    CX_PROB = 0.6
+    MUT_PROB = 0.8
+    ELIT_PCT = 0.07
+
     def __init__(self, sampling_points, environment_map, max_cost):
         '''
             Initialize the OP GA instance.
@@ -34,15 +42,12 @@ class GeneticAlgorithm:
         self.environment_map = environment_map
         self.max_cost = max_cost
 
-    def run(self, start, finish, pop_size, max_gen):
+    def run(self, start, finish):
         '''
             Run the genetic algorithm instance.
 
             @start: (int, int) Robot's path start point.
             @finish: (int, int) Robot's path end point.
-            @pop_size: (int) Desired number of individuals to be generated.
-            @max_gen: (int) Maximum number of generations to run the algorithm
-                for.
 
             @return: ((int, int) list) Fittest chromosome.
         '''
@@ -67,12 +72,11 @@ class GeneticAlgorithm:
 
         return cost
 
-    def initialize_population(self, pop_size, start, finish):
+    def initialize_population(self, start, finish):
         '''
             Initialize the genetic algorithm population with randomly generated
             individuals.
 
-            @pop_size: (int) Desired number of individuals to be generated.
             @start: (int, int) Robot's path start point.
             @finish: (int, int) Robot's path end point.
 
@@ -83,7 +87,7 @@ class GeneticAlgorithm:
         done = False
         map_dim = self.environment_map.shape
 
-        for _ in range(pop_size):
+        for _ in range(self.POP_SIZE):
             chromosome = [start]
 
             # Retrieve available vertices.
@@ -107,12 +111,78 @@ class GeneticAlgorithm:
 
         return population
 
-    def select_new_population(self):
+    def tournament_selection(population):
         '''
-            Select the new population for the next generation of individuals.
+            Perform a tournament selection on a population of individuals.
+
+            @population: (((int, int) list) list) Population to perform the
+                selection on.
+
+            @return: ((int, int) list) Selected individual.
         '''
 
-        pass  # TODO
+        indices = np.random.choice(range(len(population)),
+                                   self.TOURNAMENT_SIZE, replace=False)
+
+        individuals = [population[i] for i in indices]
+
+        return self.get_fittest_chromosome(individuals)
+
+    def get_random_parents(population):
+        '''
+            Select two individuals from a population to procriate.
+
+            @population: (((int, int) list) list) Population to perform the
+                selection on.
+
+            @return:
+                ((int, int) list) Parent 1.
+                ((int, int) list) Parent 2.
+        '''
+
+        parent1 = self.tournament_selection(population)
+        parent2 = self.tournament_selection(population)
+
+        # Make sure the parents are two different individuals
+        while parent1 == parent2:
+            parent2 = self.tournament_selection(population)
+
+        return parent1, parent2
+
+    def select_new_population(self, current_population):
+        '''
+            Select the new population for the next generation of individuals.
+
+            @current_population: (((int, int) list) list) Current population.
+
+            @return: (((int, int) list) list) Next generation population.
+        '''
+
+        # Elitism
+        new_population = []
+        for i in range(int(self.ELIT_PCT * self.POP_SIZE)):
+            fittest = self.get_fittest_chromosome(current_population)
+            new_population.append(fittest)
+
+        # Genetic operators
+        while len(new_population) < self.POP_SIZE:
+            parent1, parent2 = self.get_random_parents(current_population)
+
+            # Crossover
+            child1, child2 = self.crossover(parent1, parent2) \
+                if np.random.uniform() < self.CX_PROB else \
+                [tuple(g) for g in parent1], [tuple(g) for g in parent2]
+
+            # Mutation
+            child1 = self.mutate(
+                child1) if np.random.uniform < self.MUT_PROB else child1
+
+            child2 = self.mutate(
+                child2) if np.random.uniform < self.MUT_PROB else child2
+
+            new_population += [child1, child2]
+
+        return new_population
 
     def crossover(self, parent1, parent2):
         '''
@@ -193,12 +263,9 @@ class GeneticAlgorithm:
             @return: (float) Chromosome fitness.
         '''
 
-        rewards = 0
+        reward = sum([self.sampling_points(gene) for gene in chromosome])
 
-        for gene in chromosome:
-            rewards += self.sampling_points(gene)
-
-        return (rewards ** 3) / self.get_path_cost(chromosome)
+        return (reward ** 3) / self.get_path_cost(chromosome)
 
     def get_fittest_chromosome(self, population):
         '''
