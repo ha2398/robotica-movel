@@ -1,7 +1,13 @@
 <launch>
   <!-- Name of the world file to use -->
   <arg name="world_file"     default="$(find projetofinal)/maps/holonomic_map.world"/>
-  <arg name="costmap"         default="$(find projetofinal)/input/points_max30_h16_w16_j5.txt"/>
+  <arg name="rewards"         default="$(find projetofinal)/input/rewards30x30_min20_max50_j5.txt"/>
+  <arg name="max_cost"         default="50"/>
+  <arg name="start_x"         default="-7"/>
+  <arg name="start_y"         default="-10"/>
+  <arg name="end_x"         default="9"/>
+  <arg name="end_y"         default="9"/>
+  <arg name="navigate"      default="0"/>
 
   <param name="/use_sim_time" value="true"/>
 
@@ -25,5 +31,5 @@
     <param name="base_watchdog_timeout" value="0.5"/>
   </node>
 
-  <node pkg="projetofinal" type="pf.py" name="pf" output="screen" args="$(arg costmap)" required="true"></node>
+  <node pkg="projetofinal" type="pf.py" name="pf" output="screen" args="$(arg rewards) $(arg max_cost) $(arg start_x) $(arg start_y) $(arg end_x) $(arg end_y) $(arg navigate)" required="true"></node>
 </launch>

@@ -10,16 +10,61 @@ Orienteering Problem
 pf.py: Main program.
 '''
 
+import matplotlib.cm as cm
+import matplotlib.pyplot as plt
 import numpy as np
 import rospy
 
-from ga import GeneticAlgorithm
+from grid import *
 from robot import Robot
 from sys import argv
 
+np.random.seed(0)
+
+from ga import GeneticAlgorithm
 
 RATE = 10
 QUEUE_SIZE = 10
+
+
+def print_path(rewards, path, cost, reward, max_cost):
+    '''
+        Plot a figure with the rewards in the map and the path found.
+
+        @path: ((int, int) list) Path found.
+        @cost: (float) Path cost.
+        @reward: (float) Total path reward.
+        @max_cost: (float) Max cost of OP instance.
+    '''
+
+    dim = rewards.shape
+
+    x, y, colormap = [], [], []
+    for i in range(dim[0]):
+        for j in range(dim[1]):
+            coord = index_to_center_of_mass(i, j, rewards)
+            x.append(coord[0])
+            y.append(coord[1])
+            colormap.append(rewards[i, j])
+
+    plt.figure(figsize=(10, 8), dpi=200)
+    plt.rc('font', size=15)
+    plt.xlabel('x')
+    plt.ylabel('y')
+    plt.axhline(y=0, color='black', linewidth='1')
+    plt.axvline(x=0, color='black', linewidth='1')
+    sc = plt.scatter(x, y, c=colormap, cmap=cm.jet, marker='o', s=140)
+    cb = plt.colorbar(sc)
+    cb.set_label('Rewards on map')
+    plt.title('Max cost: {}\nPath cost: {}\nPath reward: {}'.format(
+        max_cost, round(cost, 2), round(reward, 2)))
+
+    path = list(zip(path, path[1:]))
+    for line in path:
+        x, y = list(zip(line[0], line[1]))
+        plt.plot(x, y, linewidth=5, color='black', linestyle='--')
+
+    plt.savefig('heatmap{}x{}_maxc{}.png'.format(dim[0], dim[1], max_cost))
 
 
 def get_args():
@@ -29,12 +74,12 @@ def get_args():
 
     args = {
         'rewards': argv[1],
-        'map': argv[2],
-        'max_cost': float(argv[3]),
-        'start_x': float(argv[4]),
-        'start_y': float(argv[5]),
-        'end_x': float(argv[6]),
-        'end_y': float(argv[7])
+        'max_cost': float(argv[2]),
+        'start_x': float(argv[3]),
+        'start_y': float(argv[4]),
+        'end_x': float(argv[5]),
+        'end_y': float(argv[6]),
+        'navigate': int(argv[7])
     }
 
     return args
@@ -51,25 +96,43 @@ def run():
     # Load input
     sampling_points = np.genfromtxt(
         args['rewards'], delimiter=' ', dtype=float)
-    environment_map = np.genfromtxt(args['map'], delimiter=' ', dtype=int)
 
+    print 'Running GA heuristic...'
     # Run the GA heuristic to get robot path.
-    ga_op = GeneticAlgorithm(
-        sampling_points, environment_map, args['max_cost'])
+    ga_op = GeneticAlgorithm(sampling_points, args['max_cost'])
 
-    path = ga_op.run((args['start_x'], args['start_y']),
-                     (args['end_x'], args['end_y']))
+    path, cost, rewards = ga_op.run((args['start_x'], args['start_y']),
+                                    (args['end_x'], args['end_y']))
+    print 'Done.'
+
+    dim = sampling_points.shape
+    filename = 'path_{}x{}_maxc{}.txt'.format(dim[0], dim[1], args['max_cost'])
+    with open(filename, 'w') as output_file:
+        output_file.write('{}\n'.format(args['max_cost']))
+        output_file.write('{}\n'.format(round(cost, 2)))
+        output_file.write('{}\n'.format(round(rewards, 2)))
+
+        for coord in path:
+            output_file.write('{}\n'.format(coord))
+
+    print_path(sampling_points, path, cost, rewards, args['max_cost'])
+
+    if args['navigate'] == 0:
+        return
 
     robot = Robot(RATE, QUEUE_SIZE)
 
     while not robot.is_ready():
         pass
 
+    print 'Starting navigation through path:', path
     goal = None
     # Control robot through the path.
     while not rospy.is_shutdown() and len(path) > 0:
-        if goal is None or not robot.bug2(*goal):
+        if goal is None or not robot.bug2(goal[0], goal[1]):
             goal = path.pop(0)
+
+    print 'Done.'
 
     return
 

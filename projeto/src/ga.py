@@ -14,6 +14,7 @@ ga.py: Genetic Algorithm methods.
 import numpy as np
 
 from grid import *
+from time import time
 
 
 class GeneticAlgorithm:
@@ -26,40 +27,47 @@ class GeneticAlgorithm:
     MUT_PROB = 0.8
     ELIT_PCT = 0.07
 
-    def __init__(self, sampling_points, environment_map, max_cost):
+    def __init__(self, sampling_points, max_cost):
         '''
             Initialize the OP GA instance.
 
             @sampling_points: (2D numpy array) Array that represents the
                 sampling points in the environment and their rewards.
-            @environment_map: (2D numpy array) Array that represents the
-                environment map as a Occupancy Grid map. Each cell stores 0,
-                in case it's free and 1, in case it's occupied by an obstacle.
             @max_cost: (float) Max path cost.
         '''
 
         self.sampling_points = sampling_points
-        self.environment_map = environment_map
         self.max_cost = max_cost
 
     def run(self, start, finish):
         '''
             Run the genetic algorithm instance.
 
-            @start: (int, int) Robot's path start point.
-            @finish: (int, int) Robot's path end point.
+            @start: (float, float) Robot's path start point (coordinates).
+            @finish: (float, float) Robot's path end point (coordinates).
 
-            @return: ((int, int) list) Fittest chromosome.
+            @return:
+                ((int, int) list) Fittest chromosome.
+                (float) Fitness of fittest chromosome.
         '''
+
+        start = position_to_index(start[0], start[1], self.sampling_points)
+        finish = position_to_index(finish[0], finish[1], self.sampling_points)
 
         population = self.initialize_population(start, finish)
         generation = 0
 
         while generation < self.GEN_NUMBER:
+            print 'Generation', generation
+            t0 = time()
             population = self.select_new_population(population)
+            print 'Time elapsed:', round(time() - t0, 2), 's'
+            generation += 1
+            print
 
-        path_indices = self.get_fittest_chromosome(population)
-        return [index_to_center_of_mass(*v) for v in path_indices]
+        fittest = self.get_fittest_chromosome(population)
+        return [index_to_center_of_mass(v[0], v[1], self.sampling_points)
+                for v in fittest], self.get_path_cost(fittest), self.get_total_reward(fittest)
 
     def get_path_cost(self, path):
         '''
@@ -72,8 +80,10 @@ class GeneticAlgorithm:
 
         cost = 0
         for start, end in list(zip(path, path[1:])):
-            p1 = np.array(index_to_center_of_mass(start))
-            p2 = np.array(index_to_center_of_mass(end))
+            p1 = np.array(index_to_center_of_mass(start[0], start[1],
+                                                  self.sampling_points))
+            p2 = np.array(index_to_center_of_mass(end[0], end[1],
+                                                  self.sampling_points))
 
             cost += np.linalg.norm(p2 - p1)
 
@@ -91,23 +101,25 @@ class GeneticAlgorithm:
         '''
 
         population = []
-        done = False
-        map_dim = self.environment_map.shape
+        map_dim = self.sampling_points.shape
 
-        for _ in range(self.POP_SIZE):
+        while len(population) < self.POP_SIZE:
             chromosome = [start]
 
             # Retrieve available vertices.
             vertices = []
             for i in range(map_dim[0]):
                 for j in range(map_dim[1]):
-                    if self.environment_map[(i, j)] == 1:
+                    if self.sampling_points[(i, j)] != 1:
                         vertices.append((i, j))
 
+            done = False
             while not done and len(vertices) != 0:
-                v = np.random.choice(vertices)
+                v = np.random.choice(range(len(vertices)))
+                v = vertices[v]
+                insertion_cost = self.get_path_cost(chromosome + [v, finish])
 
-                if self.get_path_cost(chromosome + [v]) <= self.max_cost:
+                if insertion_cost <= self.max_cost:
                     chromosome.append(v)
                     vertices.remove(v)
                 else:
@@ -118,7 +130,7 @@ class GeneticAlgorithm:
 
         return population
 
-    def tournament_selection(population):
+    def tournament_selection(self, population):
         '''
             Perform a tournament selection on a population of individuals.
 
@@ -130,12 +142,11 @@ class GeneticAlgorithm:
 
         indices = np.random.choice(range(len(population)),
                                    self.TOURNAMENT_SIZE, replace=False)
-
         individuals = [population[i] for i in indices]
 
         return self.get_fittest_chromosome(individuals)
 
-    def get_random_parents(population):
+    def get_random_parents(self, population):
         '''
             Select two individuals from a population to procriate.
 
@@ -167,29 +178,47 @@ class GeneticAlgorithm:
 
         # Elitism
         new_population = []
-        for i in range(int(self.ELIT_PCT * self.POP_SIZE)):
-            fittest = self.get_fittest_chromosome(current_population)
-            new_population.append(fittest)
+        elit_size = int(self.ELIT_PCT * self.POP_SIZE)
+        for individual in self.get_fittest_chromosome(current_population,
+                                                      elit_size):
+            new_population.append(individual)
 
         # Genetic operators
         while len(new_population) < self.POP_SIZE:
             parent1, parent2 = self.get_random_parents(current_population)
 
             # Crossover
-            child1, child2 = self.crossover(parent1, parent2) \
-                if np.random.uniform() < self.CX_PROB else \
-                [tuple(g) for g in parent1], [tuple(g) for g in parent2]
+            if np.random.uniform < self.CX_PROB:
+                child1, child2 = self.crossover(parent1, parent2)
+            else:
+                child1 = [tuple(g) for g in parent1]
+                child2 = [tuple(g) for g in parent2]
 
             # Mutation
-            child1 = self.mutate(
-                child1) if np.random.uniform < self.MUT_PROB else child1
-
-            child2 = self.mutate(
-                child2) if np.random.uniform < self.MUT_PROB else child2
+            if np.random.uniform() < self.MUT_PROB:
+                child1 = self.mutate(child1)
+                child2 = self.mutate(child2)
 
             new_population += [child1, child2]
 
         return new_population
+
+    def remove_duplicated_genes(self, chromosome):
+        '''
+            Remove duplicated genes in a chromosome.
+
+            @chromosome: ((int, int) list) Chromosome to remove duplicates on.
+
+            @return: ((int, int) list) The chromosome passed as argument, but
+                without any duplicated genes.
+        '''
+
+        new_chromosome = []
+        for gene in chromosome:
+            if gene not in new_chromosome:
+                new_chromosome.append(gene)
+
+        return new_chromosome
 
     def crossover(self, parent1, parent2):
         '''
@@ -223,6 +252,10 @@ class GeneticAlgorithm:
             child1 = [tuple(t) for t in parent1[:index_v_1] + tail_2]
             child2 = [tuple(t) for t in parent2[:index_v_2] + tail_1]
 
+            # Remove duplicates
+            child1 = self.remove_duplicated_genes(child1)
+            child2 = self.remove_duplicated_genes(child2)
+
             return child1, child2
         else:  # No, they don't.
             return parent1, parent2
@@ -248,10 +281,10 @@ class GeneticAlgorithm:
         mutations = [[tuple(t) for t in chromosome]]
         for vertex in neighbour_indices:
             # Ignore neighbour vertices already in chromosome
-            if index in chromosome:
+            if vertex in chromosome:
                 continue
 
-            mutation[mutate_point] = index
+            mutation[mutate_point] = vertex
 
             # Ignore mutations that violate the cost limit
             if self.get_path_cost(mutation) > self.max_cost:
@@ -260,6 +293,18 @@ class GeneticAlgorithm:
             mutations.append([tuple(t) for t in mutation])
 
         return self.get_fittest_chromosome(mutations)
+
+    def get_total_reward(self, chromosome):
+        '''
+            Get the total reward the robot would get by visiting all vertices
+            in the chromosome.
+
+            @chromosome: ((int, int) list) Chromosome to calculate rewards for.
+
+            @return: (float) Sum of rewards.
+        '''
+
+        return sum([self.sampling_points[gene] for gene in chromosome])
 
     def evaluate_chromosome(self, chromosome):
         '''
@@ -270,15 +315,16 @@ class GeneticAlgorithm:
             @return: (float) Chromosome fitness.
         '''
 
-        reward = sum([self.sampling_points(gene) for gene in chromosome])
+        reward = self.get_total_reward(chromosome)
 
         return (reward ** 3) / self.get_path_cost(chromosome)
 
-    def get_fittest_chromosome(self, population):
+    def get_fittest_chromosome(self, population, number=1):
         '''
             Get the fittest chromosome in a population.
 
             @population: (((int, int) list) list) Population of individuals.
+            @number: (int) Number of fittest individuals to select.
 
             @return: ((int, int) list) Fittest chromosome in the population.
         '''
@@ -286,4 +332,7 @@ class GeneticAlgorithm:
         by_fitness = sorted(
             population, key=self.evaluate_chromosome, reverse=True)
 
-        return by_fitness[0]
+        if number == 1:
+            return by_fitness[0]
+        else:
+            return by_fitness[:number]

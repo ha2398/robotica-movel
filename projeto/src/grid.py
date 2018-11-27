@@ -30,7 +30,7 @@ def index_to_center_of_mass(i, j, array):
     width = array.shape[1]
     height = array.shape[0]
 
-    return (j - (width - 1) / 2, (height - 1) / 2 - i)
+    return (j - (width - 1) / 2., (height - 1) / 2. - i)
 
 
 def position_to_index(x, y, array):

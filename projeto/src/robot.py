@@ -11,9 +11,8 @@ import numpy as np
 import rospy
 
 from geometry_msgs.msg import Twist
-from grid import Grid
 from math import atan2, degrees
-from nav_msgs.msg import OccupancyGrid, Odometry
+from nav_msgs.msg import Odometry
 from sensor_msgs.msg import LaserScan
 from tf.transformations import euler_from_quaternion
 
@@ -51,10 +50,7 @@ class Robot:
         self.vel_pub = rospy.Publisher('/cmd_vel', Twist,
                                        queue_size=ros_queue_size)
         rospy.Subscriber('/base_scan', LaserScan, self.laser_callback)
-        rospy.Subscriber('/base_pose_ground_truth',
-                         Odometry, self.odom_callback)
-        self.map_pub = rospy.Publisher('/map', OccupancyGrid,
-                                       queue_size=ros_queue_size)
+        rospy.Subscriber('/odom', Odometry, self.odom_callback)
         self.rate = rospy.Rate(robot_rate)
 
         self.laser_msg = None
@@ -367,6 +363,7 @@ class Robot:
             # Line coefficients.
             self.line_a, self.line_b, self.line_c = None, None, None
             self.line_set = False
+            self.set_front = False
             return False
 
         # Set line to goal and follow it.
@@ -381,97 +378,8 @@ class Robot:
             else:
                 self.line_a, self.line_b, self.line_c = None, None, None
                 self.line_set = False
+                self.set_front = False
                 return False
 
         self.follow_line(x, y)
         return True
-
-    def apply_measurements_to_grid(self, grid):
-        '''
-            Update the grid map with the new measurements from laser sensor.
-
-            @grid: (Grid) Current Occupancy Grid object.
-        '''
-
-        pos = np.array(self.get_robot_coordinates())
-
-        # Array with distances from robot to center of mass of all cells.
-        cell_distances = np.asarray([[np.linalg.norm(np.array(
-            grid.center_of_mass_from_index(i, j) - pos))
-            for i in range(grid.width)] for j in range(grid.height)])
-
-        # Array with angles between the robot's orientation and the center of
-        # mass of all cells.
-        cell_angles = np.asarray([[np.arctan2(*tuple(
-            grid.center_of_mass_from_index(i, j)[::-1] - pos[::-1]))
-            for i in range(grid.width)] for j in range(grid.height)])
-
-        yaw = self.get_yaw()
-        for i in range(len(self.laser_msg.ranges)):
-            d = self.laser_msg.ranges[i]  # Observed range
-            # Angle between robot and the end of beam.
-            theta = np.radians(i / 2) - np.radians(90) + yaw
-
-            # Free cells are closer to the robot but still within the beam
-            # angle.
-            free_cells = np.logical_and(
-                np.abs(cell_angles - theta) <= (grid.beta / 2),
-                (cell_distances < (d - grid.ALPHA / 2)))
-
-            # Occupied cells are further from the robot but still within the
-            # beam angle.
-            occupied_cells = np.logical_and(
-                np.abs(cell_angles - theta) <= (grid.beta / 2),
-                (np.abs(cell_distances - d) <= grid.ALPHA / 2))
-
-            # Update the log-odds ratio for all cells accordingly to their
-            # type (free or occupied).
-            grid.cells[free_cells] += grid.l_free
-            grid.cells[occupied_cells] += grid.l_occ
-
-        return
-
-    def publish_occupancy_grid(self, grid):
-        '''
-            Create and publish Occupancy Grid message.
-
-            @grid: (Grid) Current Occupancy Grid object.
-        '''
-
-        # Create and publish message.
-        msg = grid.get_occupancy_msg()
-        self.map_pub.publish(msg)
-        return
-
-    def occupancy_grid(self, height, width, resolution, frontiers):
-        '''
-            Run the Occupancy Grid algorithm to find the environment map.
-
-            @height: (int) Number of cells that form the grid's height.
-            @width: (int) Number of cells that form the grid's width.
-            @resolution: (float) Size of the cells side.
-            @frontiers: (int) Number of random frontier points to explore.
-        '''
-
-        max_laser_range = 8.0
-        num_ranges = len(self.laser_msg.ranges)
-        grid = Grid(height, width, resolution, max_laser_range, num_ranges)
-
-        goal = None
-        frontiers_explored = 0
-        while not rospy.is_shutdown():
-            # Occupancy Grid algorithm.
-            self.apply_measurements_to_grid(grid)
-            self.publish_occupancy_grid(grid)
-
-            # Exploration
-            if goal is None or not self.bug2(*goal):
-                goal = grid.get_random_frontier_cell()
-                frontiers_explored += 1
-
-                if goal is None or frontiers_explored > frontiers:
-                    break
-
-            self.rate.sleep()
-
-        grid.dump_pgm()
