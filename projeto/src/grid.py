@@ -47,7 +47,10 @@ def position_to_index(x, y, array):
     width = array.shape[1]
     height = array.shape[0]
 
-    return int((height - 1) / 2 - y), int(x + (width - 1) / 2)
+    i = min(int((height - 1) / 2 - y), height - 1)
+    j = min(int(x + (width - 1) / 2), width - 1)
+
+    return i, j
 
 
 def get_neighbours(array, index):

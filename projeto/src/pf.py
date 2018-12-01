@@ -27,10 +27,12 @@ RATE = 10
 QUEUE_SIZE = 10
 
 
-def print_path(rewards, path, cost, reward, max_cost):
+def print_path(height, width, rewards, path, cost, reward, max_cost):
     '''
         Plot a figure with the rewards in the map and the path found.
 
+        @height: (int) Height of map.
+        @width: (int) Width of map.
         @path: ((int, int) list) Path found.
         @cost: (float) Path cost.
         @reward: (float) Total path reward.
@@ -38,6 +40,7 @@ def print_path(rewards, path, cost, reward, max_cost):
     '''
 
     dim = rewards.shape
+    markersize = (8 * 6 * 2625) / (width * height)
 
     x, y, colormap = [], [], []
     for i in range(dim[0]):
@@ -48,21 +51,23 @@ def print_path(rewards, path, cost, reward, max_cost):
             colormap.append(rewards[i, j])
 
     plt.figure(figsize=(10, 8), dpi=200)
-    plt.rc('font', size=15)
+    plt.rc('font', size=16)
     plt.xlabel('x')
     plt.ylabel('y')
     plt.axhline(y=0, color='black', linewidth='1')
     plt.axvline(x=0, color='black', linewidth='1')
-    sc = plt.scatter(x, y, c=colormap, cmap=cm.jet, marker='o', s=140)
+    sc = plt.scatter(x, y, c=colormap, cmap=cm.jet, marker='o', s=markersize)
     cb = plt.colorbar(sc)
-    cb.set_label('Rewards on map')
-    plt.title('Max cost: {}\nPath cost: {}\nPath reward: {}'.format(
+    cb.set_label('Recompensas no mapa')
+    plt.title('Limite de custo: {}\nCusto do caminho: {}\nRecompensa do caminho: {}'.format(
         max_cost, round(cost, 2), round(reward, 2)))
 
     path = list(zip(path, path[1:]))
     for line in path:
         x, y = list(zip(line[0], line[1]))
-        plt.plot(x, y, linewidth=5, color='black', linestyle='--')
+        plt.plot(x, y, linewidth=5, color='black', marker='x', linestyle='--',
+                 markerfacecolor='white', markerfacecoloralt='white',
+                 markeredgecolor='white')
 
     plt.savefig('heatmap{}x{}_maxc{}.png'.format(dim[0], dim[1], max_cost))
 
@@ -79,7 +84,9 @@ def get_args():
         'start_y': float(argv[4]),
         'end_x': float(argv[5]),
         'end_y': float(argv[6]),
-        'navigate': int(argv[7])
+        'gen': int(argv[7]),
+        'pop': int(argv[8]),
+        'navigate': int(argv[9]),
     }
 
     return args
@@ -97,12 +104,13 @@ def run():
     sampling_points = np.genfromtxt(
         args['rewards'], delimiter=' ', dtype=float)
 
-    print 'Running GA heuristic...'
+    print 'Starting Genetic Algorithm...'
     # Run the GA heuristic to get robot path.
-    ga_op = GeneticAlgorithm(sampling_points, args['max_cost'])
+    ga_op = GeneticAlgorithm(sampling_points, args['max_cost'],
+                             args['gen'], args['pop'])
 
     path, cost, rewards = ga_op.run((args['start_x'], args['start_y']),
-                                    (args['end_x'], args['end_y']))
+                                    (args['end_x'], args['end_y']),)
     print 'Done.'
 
     dim = sampling_points.shape
@@ -115,7 +123,8 @@ def run():
         for coord in path:
             output_file.write('{}\n'.format(coord))
 
-    print_path(sampling_points, path, cost, rewards, args['max_cost'])
+    print_path(dim[0], dim[1], sampling_points, path, cost,
+               rewards, args['max_cost'])
 
     if args['navigate'] == 0:
         return

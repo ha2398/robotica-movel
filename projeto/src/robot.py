@@ -28,7 +28,7 @@ class Robot:
     kx, kt = 1, 2
 
     # Tolerance constants.
-    MIN_OBJ_DIST = 0.8
+    MIN_OBJ_DIST = 0.5
     DIST_TOLERANCE = 0.2
     MIN_DIST_IMPROVEMENT = 0.5
     ANGLE_TOLERANCE = 0.005

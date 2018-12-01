@@ -19,25 +19,27 @@ from time import time
 
 class GeneticAlgorithm:
 
-    # Fixed from literature
-    POP_SIZE = 450
-    GEN_NUMBER = 35
-    TOURNAMENT_SIZE = 3
-    CX_PROB = 0.6
-    MUT_PROB = 0.8
-    ELIT_PCT = 0.07
+    TOURNAMENT_SIZE = 7  # Number of individuals in tournament selection
+    CX_PROB = 0.8  # Crossover probability
+    MUT_PROB = 0.5  # Mutation probability
+    ELIT_PCT = 0.05  # Elitist percentage
+    IMPR_THRESHOLD = 0.1  # Improvement threshold
 
-    def __init__(self, sampling_points, max_cost):
+    def __init__(self, sampling_points, max_cost, generations, pop_size):
         '''
             Initialize the OP GA instance.
 
             @sampling_points: (2D numpy array) Array that represents the
                 sampling points in the environment and their rewards.
             @max_cost: (float) Max path cost.
+            @generations: (int) Number of generations to run the GA for.
+            @pop_size: (int) Number of individuals in each population.
         '''
 
         self.sampling_points = sampling_points
         self.max_cost = max_cost
+        self.generations = generations
+        self.pop_size = pop_size
 
     def run(self, start, finish):
         '''
@@ -51,21 +53,55 @@ class GeneticAlgorithm:
                 (float) Fitness of fittest chromosome.
         '''
 
+        self.fitness_history = {}  # Prevents repeated calculations
+
         start = position_to_index(start[0], start[1], self.sampling_points)
         finish = position_to_index(finish[0], finish[1], self.sampling_points)
 
+        file = open('stats.csv', 'w')
+        file.write('Generation,Best fitness,Fittest cost, Fittest reward,Time elapsed\n')
+
         population = self.initialize_population(start, finish)
         generation = 0
+        gens_without_improvement = 0
+        last_fitness = None
 
-        while generation < self.GEN_NUMBER:
+        while generation < self.generations and gens_without_improvement < 10:
             print 'Generation', generation
             t0 = time()
+
             population = self.select_new_population(population)
-            print 'Time elapsed:', round(time() - t0, 2), 's'
+            fittest = self.get_fittest_chromosome(population)
+            current_fitness = self.evaluate_chromosome(fittest)
+
+            if last_fitness is not None:
+                if abs(current_fitness - last_fitness) <= self.IMPR_THRESHOLD:
+                    gens_without_improvement += 1
+                else:
+                    gens_without_improvement = 0
+
+            last_fitness = current_fitness
+            c = self.get_path_cost(fittest)
+            r = self.get_total_reward(fittest)
+
+            time_elapsed = time() - t0
+
+            print 'Best fitness:', round(current_fitness, 2)
+            print 'Fittest cost:', round(c, 2)
+            print 'Fittest reward:', round(r, 2)
+            print 'Time elapsed:', round(time_elapsed, 2), 's'
+
+            file.write('{},{},{},{},{}\n'.format(generation,
+                                                 round(current_fitness, 2),
+                                                 round(c, 2),
+                                                 round(r, 2),
+                                                 round(time_elapsed, 2)))
+
             generation += 1
             print
 
-        fittest = self.get_fittest_chromosome(population)
+        file.close()
+
         return [index_to_center_of_mass(v[0], v[1], self.sampling_points)
                 for v in fittest], self.get_path_cost(fittest), self.get_total_reward(fittest)
 
@@ -103,7 +139,7 @@ class GeneticAlgorithm:
         population = []
         map_dim = self.sampling_points.shape
 
-        while len(population) < self.POP_SIZE:
+        while len(population) < self.pop_size:
             chromosome = [start]
 
             # Retrieve available vertices.
@@ -161,10 +197,6 @@ class GeneticAlgorithm:
         parent1 = self.tournament_selection(population)
         parent2 = self.tournament_selection(population)
 
-        # Make sure the parents are two different individuals
-        while parent1 == parent2:
-            parent2 = self.tournament_selection(population)
-
         return parent1, parent2
 
     def select_new_population(self, current_population):
@@ -178,13 +210,13 @@ class GeneticAlgorithm:
 
         # Elitism
         new_population = []
-        elit_size = int(self.ELIT_PCT * self.POP_SIZE)
+        elit_size = int(self.ELIT_PCT * self.pop_size)
         for individual in self.get_fittest_chromosome(current_population,
                                                       elit_size):
             new_population.append(individual)
 
         # Genetic operators
-        while len(new_population) < self.POP_SIZE:
+        while len(new_population) < self.pop_size:
             parent1, parent2 = self.get_random_parents(current_population)
 
             # Crossover
@@ -199,7 +231,9 @@ class GeneticAlgorithm:
                 child1 = self.mutate(child1)
                 child2 = self.mutate(child2)
 
-            new_population += [child1, child2]
+            for child in [child1, child2]:
+                if self.get_path_cost(child) <= self.max_cost:
+                    new_population.append(child)
 
         return new_population
 
@@ -269,6 +303,9 @@ class GeneticAlgorithm:
             @return: ((int, int) list) Mutated chromosome.
         '''
 
+        if len(chromosome) <= 3:
+            return chromosome
+
         # Get a random vertex (excluding start and end points)
         mutate_point = np.random.choice(range(len(chromosome[1:-1])))
         mutate_vertex = chromosome[1:-1][mutate_point]
@@ -315,9 +352,17 @@ class GeneticAlgorithm:
             @return: (float) Chromosome fitness.
         '''
 
-        reward = self.get_total_reward(chromosome)
+        chromosome_str = str(chromosome)
 
-        return (reward ** 3) / self.get_path_cost(chromosome)
+        if chromosome_str not in self.fitness_history:
+            reward = self.get_total_reward(chromosome)
+            fitness = (reward ** 3) / self.get_path_cost(chromosome)
+            self.fitness_history[chromosome_str] = fitness
+            # self.fitness_history[chromosome_str] = reward
+        else:
+            fitness = self.fitness_history[chromosome_str]
+
+        return fitness
 
     def get_fittest_chromosome(self, population, number=1):
         '''
